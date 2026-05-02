@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/server_record.dart';
 import '../models/file_item.dart';
-import '../services/smb_service.dart';
-import 'video_player_page.dart';
+import '../services/app_service.dart';
 
 class FileBrowserPage extends StatefulWidget {
   final String title;
@@ -21,10 +20,12 @@ class FileBrowserPage extends StatefulWidget {
 }
 
 class _FileBrowserPageState extends State<FileBrowserPage> {
+  final AppService _appService = AppService();
+  
   List<FileItem> _files = [];
   bool _isLoading = false;
   bool _isConnected = false;
-  String _currentPath = '';
+  String _currentPath = "";
 
   bool get _isRemoteMode => widget.server != null;
 
@@ -33,8 +34,6 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     super.initState();
     if (_isRemoteMode) {
       _connectAndLoad();
-    } else {
-      _loadLocalFiles();
     }
   }
 
@@ -43,20 +42,15 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       _isLoading = true;
     });
 
-    if (widget.server!.type == ServerType.smb) {
-      final connected = await SmbService().connect(
-        host: widget.server!.host,
-        share: widget.server!.share ?? '',
-        domain: widget.server!.domain,
-        username: widget.server!.username,
-        password: widget.server!.encryptedPassword,
-      );
+    if (widget.server != null) {
+      await _appService.setCurrentServer(widget.server);
+      final connected = await _appService.connect();
 
       if (connected) {
         setState(() {
           _isConnected = true;
         });
-        await _loadRemoteFiles('');
+        await _loadFiles(_currentPath);
       }
     }
 
@@ -65,29 +59,35 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     });
   }
 
-  Future<void> _loadRemoteFiles(String path) async {
+  Future<void> _loadFiles(String path) async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final entities = await SmbService().listFiles(
-        path, 
-        filterVideos: widget.filterType == FileType.video,
-      );
+      final entities = await _appService.browse(path);
       
       final List<FileItem> allFiles = [];
       
       if (path.isNotEmpty) {
         allFiles.add(FileItem(
           name: '..',
-          path: path,
-          isRemote: true,
+          path: _getParentPath(path),
+          size: 0,
+          modifiedTime: DateTime.now(),
+          isDirectory: true,
           type: FileType.folder,
         ));
       }
       
-      allFiles.addAll(entities);
+      // 过滤文件（如果需要的话）
+      for (final entity in entities) {
+        if (widget.filterType == null || 
+            entity.type == widget.filterType || 
+            entity.type == FileType.folder) {
+          allFiles.add(entity);
+        }
+      }
       
       setState(() {
         _files = allFiles;
@@ -106,31 +106,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     });
   }
 
-  Future<void> _loadLocalFiles() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      setState(() {
-        _files = [];
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载失败: $e')),
-        );
-      }
-    }
-
-    setState(() {
-      _isLoading = false;
-    });
-  }
-
   @override
   void dispose() {
-    SmbService().disconnect();
+    // AppService 是全局单例，不需要在这里断开
     super.dispose();
   }
 
@@ -221,18 +199,29 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     return Colors.blue;
   }
 
-  void _onFileTap(FileItem file) {
+  void _onFileTap(FileItem file) async {
     if (file.name == '..') {
       final parentPath = _getParentPath(_currentPath);
-      _loadRemoteFiles(parentPath);
+      _loadFiles(parentPath);
     } else if (file.type == FileType.folder) {
       final newPath = _currentPath.isEmpty ? file.name : '$_currentPath/${file.name}';
-      _loadRemoteFiles(newPath);
+      _loadFiles(newPath);
     } else if (file.type == FileType.video) {
-      // 暂时显示一个 SnackBar，不播放视频
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Video file: ${file.name}')),
-      );
+      // 统一调用中控台进行播放
+      try {
+        final proxyUrl = await _appService.preparePlayback(file);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('准备播放: ${file.name}')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('准备播放失败: $e')),
+          );
+        }
+      }
     }
   }
 

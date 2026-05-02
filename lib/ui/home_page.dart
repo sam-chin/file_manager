@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/file_item.dart';
+import '../models/server_record.dart';
+import '../services/app_service.dart';
 import 'server_list_page.dart';
 import 'file_browser_page.dart';
 
@@ -11,9 +13,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  bool _isConnectedToServer = false;
-  String? _connectedServerName;
-
+  final AppService _appService = AppService();
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,8 +58,30 @@ class _HomePageState extends State<HomePage> {
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
+        onSubmitted: (value) {
+          if (value.isNotEmpty && _appService.isConnected) {
+            _searchFiles(value);
+          }
+        },
       ),
     );
+  }
+
+  Future<void> _searchFiles(String query) async {
+    try {
+      final results = await _appService.search(query, '');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('找到 ${results.length} 个文件')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('搜索失败: $e')),
+        );
+      }
+    }
   }
 
   Widget _buildStorageOverview() {
@@ -81,65 +104,43 @@ class _HomePageState extends State<HomePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                '内部存储',
-                style: TextStyle(
+              Text(
+                _appService.currentServer != null 
+                    ? '${_appService.currentServer!.name} (${_appService.isConnected ? '已连接' : '未连接'})'
+                    : '未选择服务器',
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              Text(
-                '32.5 GB / 64 GB',
+              if (_appService.isConnected)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.green[100],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '在线',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.green[700],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (_appService.currentServer != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                _appService.currentServer!.host,
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey[600],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: 0.51,
-              backgroundColor: Colors.grey[200],
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
-              minHeight: 8,
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: Colors.blue,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '已用 32.5 GB',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                '可用 31.5 GB',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
@@ -151,13 +152,18 @@ class _HomePageState extends State<HomePage> {
         icon: Icons.video_library,
         color: Colors.red,
         label: '视频',
-        count: 42,
-        onTap: () {
+        count: null,
+        onTap: () async {
+          if (_appService.currentServer == null) {
+            _showNoServerMessage();
+            return;
+          }
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const FileBrowserPage(
+              builder: (context) => FileBrowserPage(
                 title: '视频',
+                server: _appService.currentServer,
                 filterType: FileType.video,
               ),
             ),
@@ -168,13 +174,18 @@ class _HomePageState extends State<HomePage> {
         icon: Icons.music_note,
         color: Colors.green,
         label: '音乐',
-        count: 128,
-        onTap: () {
+        count: null,
+        onTap: () async {
+          if (_appService.currentServer == null) {
+            _showNoServerMessage();
+            return;
+          }
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const FileBrowserPage(
+              builder: (context) => FileBrowserPage(
                 title: '音乐',
+                server: _appService.currentServer,
                 filterType: FileType.audio,
               ),
             ),
@@ -185,13 +196,18 @@ class _HomePageState extends State<HomePage> {
         icon: Icons.image,
         color: Colors.orange,
         label: '图片',
-        count: 256,
-        onTap: () {
+        count: null,
+        onTap: () async {
+          if (_appService.currentServer == null) {
+            _showNoServerMessage();
+            return;
+          }
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const FileBrowserPage(
+              builder: (context) => FileBrowserPage(
                 title: '图片',
+                server: _appService.currentServer,
                 filterType: FileType.image,
               ),
             ),
@@ -203,12 +219,17 @@ class _HomePageState extends State<HomePage> {
         color: Colors.blue,
         label: '文件浏览',
         count: null,
-        onTap: () {
+        onTap: () async {
+          if (_appService.currentServer == null) {
+            _showNoServerMessage();
+            return;
+          }
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => const FileBrowserPage(
+              builder: (context) => FileBrowserPage(
                 title: '文件浏览',
+                server: _appService.currentServer,
               ),
             ),
           );
@@ -224,6 +245,12 @@ class _HomePageState extends State<HomePage> {
       mainAxisSpacing: 12,
       childAspectRatio: 1.5,
       children: categories.map((cat) => _buildCategoryItem(cat)).toList(),
+    );
+  }
+
+  void _showNoServerMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('请先在局域网共享中添加并选择服务器')),
     );
   }
 
@@ -305,13 +332,18 @@ class _HomePageState extends State<HomePage> {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
-          onTap: () {
-            Navigator.push(
+          onTap: () async {
+            final result = await Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => const ServerListPage(),
               ),
             );
+            if (mounted && result is ServerRecord) {
+              await _appService.setCurrentServer(result);
+              await _appService.connect();
+              setState(() {});
+            }
           },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
@@ -343,22 +375,15 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      if (_isConnectedToServer)
-                        Text(
-                          '已连接: $_connectedServerName',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.green[700],
-                          ),
-                        )
-                      else
-                        Text(
-                          '点击添加服务器',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
+                      Text(
+                        _appService.currentServer != null 
+                            ? '当前服务器: ${_appService.currentServer!.name}'
+                            : '点击添加服务器',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
                         ),
+                      ),
                     ],
                   ),
                 ),

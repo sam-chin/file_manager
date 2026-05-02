@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/server_record.dart';
 import '../services/database_service.dart';
+import '../services/app_service.dart';
 import 'file_browser_page.dart';
 import 'add_server_page.dart';
 
@@ -12,6 +13,7 @@ class ServerListPage extends StatefulWidget {
 }
 
 class _ServerListPageState extends State<ServerListPage> {
+  final AppService _appService = AppService();
   List<ServerRecord> _servers = [];
   bool _isLoading = true;
 
@@ -90,14 +92,39 @@ class _ServerListPageState extends State<ServerListPage> {
       itemCount: _servers.length,
       itemBuilder: (context, index) {
         final server = _servers[index];
+        final isSelected = _appService.currentServer?.id == server.id;
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
+          color: isSelected ? Colors.blue[50] : null,
           child: ListTile(
             leading: Icon(
               server.type == ServerType.smb ? Icons.folder_shared : Icons.cloud,
               color: Theme.of(context).colorScheme.primary,
             ),
-            title: Text(server.name),
+            title: Row(
+              children: [
+                Text(server.name),
+                if (isSelected)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[100],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '当前',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
             subtitle: Text('${server.host}${server.port > 0 ? ':${server.port}' : ''}'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -134,16 +161,15 @@ class _ServerListPageState extends State<ServerListPage> {
                 ),
               ],
             ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => FileBrowserPage(
-                    title: server.name,
-                    server: server,
-                  ),
-                ),
-              );
+            onTap: () async {
+              // 先设置为当前服务器
+              await _appService.setCurrentServer(server);
+              await _appService.connect();
+              
+              if (mounted) {
+                // 返回服务器给上一页
+                Navigator.pop(context, server);
+              }
             },
           ),
         );
