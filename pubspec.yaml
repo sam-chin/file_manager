@@ -36,10 +36,13 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
-  isar_generator: ^3.1.0
-  build_runner: ^2.4.8
-  analyzer: ^13.0.0
+
+  # 显式锁定版本，适配 Dart 3.3.0 环境
+  analyzer: 5.13.0
+  
+  # Isar 生成器
+  isar_generator: 3.1.0
+  build_runner: 2.4.8
 
 flutter:
   uses-material-design: true
