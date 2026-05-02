@@ -1,234 +1,89 @@
 import 'dart:async';
-import 'dart:collection';
-import 'package:dlna_dart/dlna_dart.dart';
-import '../entities/device_entity.dart';
+import 'package:dlna_dart/dlna.dart';
 
 class DlnaService {
-  static final DlnaService _instance = DlnaService._internal();
-  factory DlnaService() => _instance;
-  DlnaService._internal();
+  final DLNAManager _manager = DLNAManager();
+  final StreamController<List<DLNADevice>> _deviceController = StreamController.broadcast();
 
-  DlnaManager? _dlnaManager;
-  DlnaDevice? _currentDevice;
-  final Map<String, DeviceEntity> _discoveredDevices = HashMap();
-  final StreamController<List<DeviceEntity>> _devicesController =
-      StreamController.broadcast();
-  Timer? _refreshTimer;
-  bool _isSearching = false;
+  Stream<List<DLNADevice>> get devicesStream => _deviceController.stream;
+  List<DLNADevice> _devices = [];
+  DLNADevice? _currentDevice;
 
-  bool get isSearching => _isSearching;
-  List<DeviceEntity> get devices => List.unmodifiable(_discoveredDevices.values);
-  Stream<List<DeviceEntity>> get devicesStream => _devicesController.stream;
-  DeviceEntity? get currentDevice => _currentDevice != null
-      ? _dlnaDeviceToEntity(_currentDevice!)
-      : null;
+  List<DLNADevice> get devices => _devices;
+  DLNADevice? get currentDevice => _currentDevice;
 
-  Future<void> initialize() async {
-    if (_dlnaManager != null) return;
-
-    try {
-      _dlnaManager = DlnaManager();
-      _dlnaManager!.setDeviceChangeCallback((newDevices) {
-        _onDeviceListChanged(newDevices);
-      });
-    } catch (e) {
-      _dlnaManager = null;
-    }
+  // 启动搜索 (适配示例 start 方法)
+  Future<void> startSearch() async {
+    final searcher = await _manager.start();
+    searcher.devices.stream.listen((deviceMap) {
+      // 将 Map 转换为 List 方便 UI 展示
+      _devices = deviceMap.values.toList();
+      _deviceController.add(_devices);
+    });
   }
 
-  Future<void> startSearch({Duration duration = const Duration(seconds: 10)}) async {
-    if (_isSearching || _dlnaManager == null) return;
-
-    try {
-      _isSearching = true;
-      _discoveredDevices.clear();
-      _devicesController.add([]);
-
-      await _dlnaManager!.startSearch();
-
-      _refreshTimer?.cancel();
-      _refreshTimer = Timer(duration, () {
-        stopSearch();
-      });
-    } catch (e) {
-      _isSearching = false;
-    }
+  // 停止搜索
+  void stopSearch() {
+    _manager.stop();
   }
 
-  Future<void> stopSearch() async {
-    if (_dlnaManager == null) return;
-
+  // 选择投屏设备
+  Future<bool> selectDevice(DLNADevice device) async {
     try {
-      _refreshTimer?.cancel();
-      _refreshTimer = null;
-      await _dlnaManager!.stopSearch();
-    } finally {
-      _isSearching = false;
-    }
-  }
-
-  Future<bool> selectDevice(DeviceEntity device) async {
-    if (_dlnaManager == null) return false;
-
-    try {
-      final devices = _dlnaManager!.getDevices();
-      _currentDevice = devices.firstWhere(
-        (d) => _deviceId(d) == device.id,
-        orElse: () => null,
-      );
-
-      if (_currentDevice != null) {
-        return true;
-      }
-      return false;
-    } catch (e) {
-      _currentDevice = null;
-      return false;
-    }
-  }
-
-  Future<void> clearSelectedDevice() async {
-    try {
-      if (_currentDevice != null) {
-        await _currentDevice!.stop();
-      }
-    } finally {
-      _currentDevice = null;
-    }
-  }
-
-  Future<bool> setVideoUri(String uri) async {
-    if (_currentDevice == null) return false;
-
-    try {
-      await _currentDevice!.setVideoUri(uri);
+      _currentDevice = device;
       return true;
     } catch (e) {
+      print('Select Device Error: $e');
       return false;
     }
   }
 
-  Future<bool> play() async {
-    if (_currentDevice == null) return false;
-
+  // 投屏核心逻辑
+  Future<void> castVideo(DLNADevice device, String videoUrl, String title) async {
     try {
+      _currentDevice = device;
+      // 1. 设置播放地址
+      await device.setUrl(videoUrl);
+      // 2. 开始播放
+      await device.play();
+      print('Casting to ${device.info.friendlyName}: $videoUrl');
+    } catch (e) {
+      print('DLNA Cast Error: $e');
+    }
+  }
+
+  // 播放控制
+  Future<void> play() async {
+    if (_currentDevice != null) {
       await _currentDevice!.play();
-      return true;
-    } catch (e) {
-      return false;
     }
   }
 
-  Future<bool> pause() async {
-    if (_currentDevice == null) return false;
-
-    try {
+  Future<void> pause() async {
+    if (_currentDevice != null) {
       await _currentDevice!.pause();
-      return true;
-    } catch (e) {
-      return false;
     }
   }
 
-  Future<bool> stop() async {
-    if (_currentDevice == null) return false;
-
-    try {
+  Future<void> stop() async {
+    if (_currentDevice != null) {
       await _currentDevice!.stop();
-      return true;
-    } catch (e) {
-      return false;
     }
   }
 
-  Future<bool> seek(Duration position) async {
-    if (_currentDevice == null) return false;
-
-    try {
-      final seconds = position.inSeconds;
-      await _currentDevice!.seek(seconds);
-      return true;
-    } catch (e) {
-      return false;
-    }
+  // 控制指令：快进
+  Future<void> seekRelative(DLNADevice device, int seconds) async {
+    // 适配示例：获取当前进度并跳转
+    final currentTime = await device.position();
+    await device.seekByCurrent(currentTime, seconds);
   }
 
-  Future<Duration?> getPosition() async {
-    if (_currentDevice == null) return null;
-
-    try {
-      final info = await _currentDevice!.getPositionInfo();
-      if (info.relTime != null) {
-        return _parseDuration(info.relTime!);
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  Future<Duration?> getDuration() async {
-    if (_currentDevice == null) return null;
-
-    try {
-      final info = await _currentDevice!.getMediaInfo();
-      if (info.trackDuration != null) {
-        return _parseDuration(info.trackDuration!);
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  Duration? _parseDuration(String durationStr) {
-    try {
-      final parts = durationStr.split(':');
-      if (parts.length == 3) {
-        final hours = int.tryParse(parts[0]) ?? 0;
-        final minutes = int.tryParse(parts[1]) ?? 0;
-        final seconds = double.tryParse(parts[2]) ?? 0;
-        return Duration(
-          hours: hours,
-          minutes: minutes,
-          seconds: seconds.toInt(),
-          milliseconds: ((seconds - seconds.toInt()) * 1000).toInt(),
-        );
-      }
-    } catch (e) {
-      return null;
-    }
-    return null;
-  }
-
-  void _onDeviceListChanged(List<DlnaDevice> devices) {
-    for (final device in devices) {
-      final entity = _dlnaDeviceToEntity(device);
-      _discoveredDevices[entity.id] = entity;
-    }
-    _devicesController.add(this.devices);
-  }
-
-  DeviceEntity _dlnaDeviceToEntity(DlnaDevice device) {
-    return DeviceEntity(
-      id: _deviceId(device),
-      name: device.friendlyName ?? 'Unknown Device',
-      location: device.location ?? '',
-      udn: device.udn,
-      manufacturer: device.manufacturer,
-      modelName: device.modelName,
-    );
-  }
-
-  String _deviceId(DlnaDevice device) {
-    return device.udn ?? device.location ?? device.friendlyName ?? '';
+  Future<void> seekTo(DLNADevice device, Duration position) async {
+    await device.seek(position.inSeconds);
   }
 
   Future<void> dispose() async {
-    await stopSearch();
-    await clearSelectedDevice();
-    await _devicesController.close();
-    _discoveredDevices.clear();
-    _dlnaManager = null;
+    stopSearch();
+    await _deviceController.close();
   }
 }

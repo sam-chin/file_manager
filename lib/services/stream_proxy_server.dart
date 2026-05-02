@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'smb_service.dart';
 
 class StreamProxyServer {
@@ -10,7 +9,6 @@ class StreamProxyServer {
 
   HttpServer? _server;
   int _port = 8080;
-  final Map<String, StreamSubscription<Uint8List>> _activeSubscriptions = {};
 
   int get port => _port;
   String get baseUrl => 'http://127.0.0.1:$_port';
@@ -37,10 +35,6 @@ class StreamProxyServer {
     if (_server == null) return;
 
     try {
-      for (final sub in _activeSubscriptions.values) {
-        await sub.cancel();
-      }
-      _activeSubscriptions.clear();
       await _server!.close(force: true);
     } finally {
       _server = null;
@@ -75,6 +69,7 @@ class StreamProxyServer {
     final filePath = Uri.decodeComponent(encodedPath);
     bool responseSent = false;
 
+    RandomAccessFile? raf;
     try {
       if (!SmbService().isConnected) {
         try {
@@ -104,17 +99,72 @@ class StreamProxyServer {
         return;
       }
 
-      // 对于新 API，我们只发送完整文件流，暂不处理 Range
-      response.statusCode = HttpStatus.ok;
+      // 获取随机访问文件
+      raf = await SmbService().openRandomAccessFile(filePath);
+      final fileSize = await raf.length();
+
+      // 设置基本响应头
       response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
       response.headers.set(HttpHeaders.contentTypeHeader, _getContentType(filePath));
 
-      // 使用新的 openRead 方法
-      final stream = await SmbService().openRead(filePath);
-      await stream.pipe(response);
-      responseSent = true;
+      // 处理 Range 请求 (HTTP 206)
+      final rangeHeader = request.headers.value('range');
+      if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+        try {
+          final range = rangeHeader.substring(6);
+          final parts = range.split('-');
+          
+          int start = 0;
+          if (parts[0].isNotEmpty) {
+            start = int.tryParse(parts[0]) ?? 0;
+          }
+          
+          int end = fileSize - 1;
+          if (parts.length > 1 && parts[1].isNotEmpty) {
+            end = int.tryParse(parts[1]) ?? fileSize - 1;
+          }
+
+          // 边界检查
+          if (start < 0) start = 0;
+          if (end >= fileSize) end = fileSize - 1;
+          if (start > end) {
+            response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
+            response.headers.set(HttpHeaders.contentRangeHeader, 'bytes */$fileSize');
+            try {
+              await response.close();
+            } catch (_) {}
+            return;
+          }
+
+          // 跳转位置
+          await raf.setPosition(start);
+          
+          // 设置 206 响应
+          response.statusCode = HttpStatus.partialContent;
+          final contentLength = end - start + 1;
+          response.headers.set(HttpHeaders.contentLengthHeader, contentLength);
+          response.headers.set(HttpHeaders.contentRangeHeader, 'bytes $start-$end/$fileSize');
+          
+          // 发送数据
+          await _pipeRange(raf, response, start, end);
+          responseSent = true;
+
+        } catch (e) {
+          print('Range Error: $e');
+          // 回退到完整文件传输
+          await _pipeFull(raf, response, fileSize);
+          responseSent = true;
+        }
+      } else {
+        // 无 Range 请求，发送完整文件
+        response.statusCode = HttpStatus.ok;
+        response.headers.set(HttpHeaders.contentLengthHeader, fileSize);
+        await _pipeFull(raf, response, fileSize);
+        responseSent = true;
+      }
 
     } catch (e) {
+      print('Proxy Error: $e');
       if (!responseSent) {
         try {
           response
@@ -122,7 +172,40 @@ class StreamProxyServer {
             ..close();
         } catch (_) {}
       }
+    } finally {
+      try {
+        await raf?.close();
+      } catch (_) {}
     }
+  }
+
+  Future<void> _pipeFull(RandomAccessFile raf, HttpResponse response, int fileSize) async {
+    await raf.setPosition(0);
+    await _pipeRange(raf, response, 0, fileSize - 1);
+  }
+
+  Future<void> _pipeRange(RandomAccessFile raf, HttpResponse response, int start, int end) async {
+    const bufferSize = 8192;
+    int bytesRemaining = end - start + 1;
+    
+    while (bytesRemaining > 0) {
+      final buffer = List<int>.filled(
+        bytesRemaining < bufferSize ? bytesRemaining : bufferSize,
+        0,
+      );
+      final bytesRead = await raf.readInto(buffer);
+      
+      if (bytesRead <= 0) break;
+      
+      final data = bytesRead < buffer.length ? buffer.sublist(0, bytesRead) : buffer;
+      response.add(data);
+      bytesRemaining -= bytesRead;
+      
+      if (bytesRead < bufferSize) break;
+    }
+    
+    await response.flush();
+    await response.close();
   }
 
   String _getContentType(String filePath) {

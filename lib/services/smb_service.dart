@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:smb_connect/smb_connect.dart';
 
-// 定义 UI 通用模型，确保 file_browser_page.dart 不再报错
+// 统一的文件模型，解决 UI 层的 'SmbFileInfo' 类型缺失错误
 class FileEntity {
   final String name;
   final String path;
@@ -18,36 +18,28 @@ class FileEntity {
 }
 
 class SmbService {
-  // 按照示例，保存 SmbConnect 实例
   SmbConnect? _connection;
-  String? _currentHost;
+  String? _connectedHost;
   String? _connectedShare;
   String? _connectedDomain;
   String? _connectedUsername;
   String? _connectedPassword;
 
   bool get isConnected => _connection != null;
-  String? get connectedHost => _currentHost;
+  String? get connectedHost => _connectedHost;
   String? get connectedShare => _connectedShare;
 
+  // 连接方法
   Future<bool> connect({
     required String host,
     required String share,
     String? domain,
     String? username,
     String? password,
-    Duration timeout = const Duration(seconds: 10),
   }) async {
     try {
       await disconnect();
 
-      _currentHost = host;
-      _connectedShare = share;
-      _connectedDomain = domain;
-      _connectedUsername = username;
-      _connectedPassword = password;
-
-      // 官方示例 0.0.9 的连接方式
       _connection = await SmbConnect.connectAuth(
         host: host,
         domain: domain ?? "",
@@ -55,15 +47,20 @@ class SmbService {
         password: password ?? '',
       );
 
-      // 测试：尝试获取共享列表
-      await _connection!.listShares();
+      _connectedHost = host;
+      _connectedShare = share;
+      _connectedDomain = domain;
+      _connectedUsername = username;
+      _connectedPassword = password;
+
       return true;
     } catch (e) {
-      print("SMB Connection Failed: $e");
+      print("SMB Connect Error: $e");
       return false;
     }
   }
 
+  // 获取文件列表 (适配 README 的 listFiles)
   Future<List<FileEntity>> listFiles(
     String path, {
     bool recursive = false,
@@ -71,17 +68,19 @@ class SmbService {
   }) async {
     if (_connection == null) return [];
     try {
-      // 适配示例：先获取文件夹对象，再列出文件
+      // 构建完整路径
       final fullPath = _connectedShare != null 
           ? "$_connectedShare/$path" 
           : path;
+      
+      // 0.0.9 先通过路径获取 SmbFile 对象
       SmbFile folder = await _connection!.file(fullPath);
       List<SmbFile> files = await _connection!.listFiles(folder);
 
       final result = files.map((f) => FileEntity(
         name: f.name,
         path: path.isEmpty ? f.name : '$path/${f.name}',
-        size: 0, // 0.0.9 版本暂不获取 size
+        size: f.size, // 0.0.9 文档显示 SmbFile 有 size 属性
         isDirectory: f.isDirectory(),
       )).toList();
 
@@ -124,6 +123,7 @@ class SmbService {
       final fullPath = _connectedShare != null 
           ? "$_connectedShare/$path" 
           : path;
+      
       SmbFile file = await _connection!.file(fullPath);
 
       final fileName = _getFileName(path);
@@ -133,7 +133,7 @@ class SmbService {
       return FileEntity(
         name: fileName,
         path: entityPath,
-        size: 0,
+        size: file.size,
         isDirectory: file.isDirectory(),
       );
     } catch (e) {
@@ -142,20 +142,21 @@ class SmbService {
     }
   }
 
-  // 关键：对接代理服务器的流读取
-  Future<Stream<Uint8List>> openRead(String path) async {
+  // 为代理服务器提供随机访问流 (RandomAccessFile)
+  // 这是支持视频进度拖动的关键
+  Future<RandomAccessFile> openRandomAccessFile(String path) async {
     if (_connection == null) throw Exception("SMB Not Connected");
     final fullPath = _connectedShare != null 
         ? "$_connectedShare/$path" 
         : path;
     SmbFile file = await _connection!.file(fullPath);
-    return await _connection!.openRead(file);
+    return await _connection!.open(file); // 对应 README 中的 Random access file
   }
 
   Future<void> disconnect() async {
     await _connection?.close();
     _connection = null;
-    _currentHost = null;
+    _connectedHost = null;
     _connectedShare = null;
     _connectedDomain = null;
     _connectedUsername = null;
