@@ -8,8 +8,8 @@ class DlnaService {
   factory DlnaService() => _instance;
   DlnaService._internal();
 
-  DLNAManager? _dlnaManager;
-  DLNARenderer? _currentRenderer;
+  DlnaManager? _dlnaManager;
+  DlnaDevice? _currentDevice;
   final Map<String, DeviceEntity> _discoveredDevices = HashMap();
   final StreamController<List<DeviceEntity>> _devicesController =
       StreamController.broadcast();
@@ -19,17 +19,17 @@ class DlnaService {
   bool get isSearching => _isSearching;
   List<DeviceEntity> get devices => List.unmodifiable(_discoveredDevices.values);
   Stream<List<DeviceEntity>> get devicesStream => _devicesController.stream;
-  DeviceEntity? get currentDevice => _currentRenderer != null
-      ? _rendererToEntity(_currentRenderer!)
+  DeviceEntity? get currentDevice => _currentDevice != null
+      ? _dlnaDeviceToEntity(_currentDevice!)
       : null;
 
   Future<void> initialize() async {
     if (_dlnaManager != null) return;
 
     try {
-      _dlnaManager = DLNAManager();
-      _dlnaManager!.setDeviceChangeCallback((devices) {
-        _onDeviceListChanged(devices);
+      _dlnaManager = DlnaManager();
+      _dlnaManager!.setDeviceChangeCallback((newDevices) {
+        _onDeviceListChanged(newDevices);
       });
     } catch (e) {
       _dlnaManager = null;
@@ -71,37 +71,37 @@ class DlnaService {
     if (_dlnaManager == null) return false;
 
     try {
-      final renderers = _dlnaManager!.getDevices();
-      _currentRenderer = renderers.firstWhere(
-        (renderer) => _deviceId(renderer) == device.id,
+      final devices = _dlnaManager!.getDevices();
+      _currentDevice = devices.firstWhere(
+        (d) => _deviceId(d) == device.id,
         orElse: () => null,
       );
 
-      if (_currentRenderer != null) {
+      if (_currentDevice != null) {
         return true;
       }
       return false;
     } catch (e) {
-      _currentRenderer = null;
+      _currentDevice = null;
       return false;
     }
   }
 
   Future<void> clearSelectedDevice() async {
     try {
-      if (_currentRenderer != null) {
-        await _currentRenderer!.stop();
+      if (_currentDevice != null) {
+        await _currentDevice!.stop();
       }
     } finally {
-      _currentRenderer = null;
+      _currentDevice = null;
     }
   }
 
   Future<bool> setVideoUri(String uri) async {
-    if (_currentRenderer == null) return false;
+    if (_currentDevice == null) return false;
 
     try {
-      await _currentRenderer!.setVideoUri(uri);
+      await _currentDevice!.setVideoUri(uri);
       return true;
     } catch (e) {
       return false;
@@ -109,10 +109,10 @@ class DlnaService {
   }
 
   Future<bool> play() async {
-    if (_currentRenderer == null) return false;
+    if (_currentDevice == null) return false;
 
     try {
-      await _currentRenderer!.play();
+      await _currentDevice!.play();
       return true;
     } catch (e) {
       return false;
@@ -120,10 +120,10 @@ class DlnaService {
   }
 
   Future<bool> pause() async {
-    if (_currentRenderer == null) return false;
+    if (_currentDevice == null) return false;
 
     try {
-      await _currentRenderer!.pause();
+      await _currentDevice!.pause();
       return true;
     } catch (e) {
       return false;
@@ -131,10 +131,10 @@ class DlnaService {
   }
 
   Future<bool> stop() async {
-    if (_currentRenderer == null) return false;
+    if (_currentDevice == null) return false;
 
     try {
-      await _currentRenderer!.stop();
+      await _currentDevice!.stop();
       return true;
     } catch (e) {
       return false;
@@ -142,11 +142,11 @@ class DlnaService {
   }
 
   Future<bool> seek(Duration position) async {
-    if (_currentRenderer == null) return false;
+    if (_currentDevice == null) return false;
 
     try {
       final seconds = position.inSeconds;
-      await _currentRenderer!.seek(seconds);
+      await _currentDevice!.seek(seconds);
       return true;
     } catch (e) {
       return false;
@@ -154,10 +154,10 @@ class DlnaService {
   }
 
   Future<Duration?> getPosition() async {
-    if (_currentRenderer == null) return null;
+    if (_currentDevice == null) return null;
 
     try {
-      final info = await _currentRenderer!.getPositionInfo();
+      final info = await _currentDevice!.getPositionInfo();
       if (info.relTime != null) {
         return _parseDuration(info.relTime!);
       }
@@ -168,10 +168,10 @@ class DlnaService {
   }
 
   Future<Duration?> getDuration() async {
-    if (_currentRenderer == null) return null;
+    if (_currentDevice == null) return null;
 
     try {
-      final info = await _currentRenderer!.getMediaInfo();
+      final info = await _currentDevice!.getMediaInfo();
       if (info.trackDuration != null) {
         return _parseDuration(info.trackDuration!);
       }
@@ -201,15 +201,15 @@ class DlnaService {
     return null;
   }
 
-  void _onDeviceListChanged(List<DLNADevice> devices) {
+  void _onDeviceListChanged(List<DlnaDevice> devices) {
     for (final device in devices) {
-      final entity = _deviceToEntity(device);
+      final entity = _dlnaDeviceToEntity(device);
       _discoveredDevices[entity.id] = entity;
     }
     _devicesController.add(this.devices);
   }
 
-  DeviceEntity _deviceToEntity(DLNADevice device) {
+  DeviceEntity _dlnaDeviceToEntity(DlnaDevice device) {
     return DeviceEntity(
       id: _deviceId(device),
       name: device.friendlyName ?? 'Unknown Device',
@@ -220,18 +220,7 @@ class DlnaService {
     );
   }
 
-  DeviceEntity _rendererToEntity(DLNARenderer renderer) {
-    return DeviceEntity(
-      id: _deviceId(renderer),
-      name: renderer.friendlyName ?? 'Unknown Device',
-      location: renderer.location ?? '',
-      udn: renderer.udn,
-      manufacturer: renderer.manufacturer,
-      modelName: renderer.modelName,
-    );
-  }
-
-  String _deviceId(DLNADevice device) {
+  String _deviceId(DlnaDevice device) {
     return device.udn ?? device.location ?? device.friendlyName ?? '';
   }
 

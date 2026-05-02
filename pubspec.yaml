@@ -10,13 +10,22 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
-  dlna_dart: 0.1.0
-  smb_connect: ^0.0.9
+
+  # 锁定 0.0.8，绝对不会触发 3.8.0 SDK 报错
+  dlna_dart: 0.0.8
+
+  # SMB 锁定 0.0.9，纯 Dart 实现
+  smb_connect: 0.0.9
+
+  # FTP 建议设为 any，让系统自动平衡
   ftpconnect: any
+
+  # 播放引擎
   media_kit: ^1.1.10
   media_kit_video: ^1.2.4
   media_kit_libs_android_video: ^1.0.8
+
+  # 其他基础库
   isar: ^3.1.0
   isar_flutter_libs: ^3.1.0
   path_provider: ^2.1.2
