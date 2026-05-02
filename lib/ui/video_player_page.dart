@@ -5,13 +5,13 @@ import '../services/player_service.dart';
 import '../services/stream_proxy_server.dart';
 
 class VideoPlayerPage extends StatefulWidget {
-  final ServerRecord server;
+  final ServerRecord? server;
   final String filePath;
   final String fileName;
 
   const VideoPlayerPage({
     super.key,
-    required this.server,
+    this.server,
     required this.filePath,
     required this.fileName,
   });
@@ -46,7 +46,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     await _playerService.playVideo(
       widget.filePath,
       fileName: widget.fileName,
-      serverId: widget.server.id,
+      serverId: widget.server?.id,
     );
 
     setState(() {

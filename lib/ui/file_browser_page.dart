@@ -71,7 +71,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     });
 
     try {
-      final entities = await SmbService().listFiles(path, filterVideos: widget.filterType == FileType.video);
+      final entities = await SmbService().listFiles(
+        path, 
+        filterVideos: widget.filterType == FileType.video,
+      );
       
       final List<FileItem> allFiles = [];
       
@@ -84,14 +87,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
         ));
       }
       
-      allFiles.addAll(entities.map((e) => FileItem(
-        name: e.name,
-        path: e.path,
-        isRemote: true,
-        type: e.isDirectory ? FileType.folder : e.type,
-        size: e.size,
-        modifiedTime: e.modifiedTime,
-      )));
+      allFiles.addAll(entities);
       
       setState(() {
         _files = allFiles;
@@ -168,7 +164,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            widget.filterType == FileType.video ? Icons.videocam_off : Icons.folder_open,
+                            widget.filterType == FileType.video 
+                                ? Icons.videocam_off 
+                                : Icons.folder_open,
                             size: 80,
                             color: Colors.grey[400],
                           ),
@@ -231,16 +229,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       final newPath = _currentPath.isEmpty ? file.name : '$_currentPath/${file.name}';
       _loadRemoteFiles(newPath);
     } else if (file.type == FileType.video) {
-      final filePath = _currentPath.isEmpty ? file.name : '$_currentPath/${file.name}';
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => VideoPlayerPage(
-            server: widget.server,
-            filePath: filePath,
-            fileName: file.name,
-          ),
-        ),
+      // 暂时显示一个 SnackBar，不播放视频
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Video file: ${file.name}')),
       );
     }
   }
