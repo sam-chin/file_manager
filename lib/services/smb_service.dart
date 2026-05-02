@@ -8,13 +8,10 @@ class SmbService {
   factory SmbService() => _instance;
   SmbService._internal();
 
-  SmbContext? _context;
+  SmbClient? _client;
   bool _isConnected = false;
   String? _connectedHost;
   String? _connectedShare;
-  String? _connectedDomain;
-  String? _connectedUsername;
-  String? _connectedPassword;
 
   bool get isConnected => _isConnected;
   String? get connectedHost => _connectedHost;
@@ -31,39 +28,32 @@ class SmbService {
     try {
       await disconnect();
 
-      final authenticator = NtlmPasswordAuthenticator(
+      _client = SmbClient(
+        host: host,
+        share: share,
         domain: domain ?? 'WORKGROUP',
         username: username ?? 'guest',
         password: password ?? '',
       );
 
-      _context = SmbContext(
-        host: host,
-        share: share,
-        authenticator: authenticator,
-      );
-
-      await _context!.connect().timeout(timeout);
+      await _client!.connect().timeout(timeout);
 
       _isConnected = true;
       _connectedHost = host;
       _connectedShare = share;
-      _connectedDomain = domain;
-      _connectedUsername = username;
-      _connectedPassword = password;
 
       return true;
     } on TimeoutException {
       _isConnected = false;
-      _context = null;
+      _client = null;
       return false;
     } on SocketException {
       _isConnected = false;
-      _context = null;
+      _client = null;
       return false;
     } catch (e) {
       _isConnected = false;
-      _context = null;
+      _client = null;
       return false;
     }
   }
@@ -73,16 +63,13 @@ class SmbService {
       _isConnected = false;
       _connectedHost = null;
       _connectedShare = null;
-      _connectedDomain = null;
-      _connectedUsername = null;
-      _connectedPassword = null;
 
-      if (_context != null) {
-        await _context!.disconnect();
-        _context = null;
+      if (_client != null) {
+        await _client!.disconnect();
+        _client = null;
       }
     } catch (e) {
-      _context = null;
+      _client = null;
     }
   }
 
@@ -91,14 +78,14 @@ class SmbService {
     bool recursive = false,
     bool filterVideos = false,
   }) async {
-    if (!_isConnected || _context == null) {
+    if (!_isConnected || _client == null) {
       throw StateError('Not connected to SMB server');
     }
 
     final List<BaseFileEntity> result = [];
 
     try {
-      final items = await _context!.listDirectory(path).timeout(
+      final items = await _client!.listDirectory(path).timeout(
         const Duration(seconds: 30),
       );
 
@@ -146,7 +133,7 @@ class SmbService {
   }
 
   Future<BaseFileEntity?> getFileInfo(String path) async {
-    if (!_isConnected || _context == null) {
+    if (!_isConnected || _client == null) {
       throw StateError('Not connected to SMB server');
     }
 
@@ -154,7 +141,7 @@ class SmbService {
       final parentPath = _getParentPath(path);
       final fileName = _getFileName(path);
 
-      final items = await _context!.listDirectory(parentPath).timeout(
+      final items = await _client!.listDirectory(parentPath).timeout(
         const Duration(seconds: 30),
       );
 
@@ -174,7 +161,7 @@ class SmbService {
   }
 
   Stream<List<int>> openFileStream(String path) {
-    if (!_isConnected || _context == null) {
+    if (!_isConnected || _client == null) {
       throw StateError('Not connected to SMB server');
     }
 
@@ -182,7 +169,7 @@ class SmbService {
 
     () async {
       try {
-        final fileStream = _context!.openFileRead(path);
+        final fileStream = _client!.openFileRead(path);
 
         await for (final chunk in fileStream) {
           if (controller.isClosed) break;
@@ -201,13 +188,6 @@ class SmbService {
     }();
 
     return controller.stream;
-  }
-
-  Future<SmbFileInfo?> openFileInfo(String path) async {
-    if (!_isConnected || _context == null) {
-      throw StateError('Not connected to SMB server');
-    }
-    return _context!.getFileInfo(path);
   }
 
   String _getParentPath(String path) {

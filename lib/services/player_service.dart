@@ -16,6 +16,8 @@ class PlayerService {
   Stream<bool> get playingStream => _player.stream.playing;
   Stream<Duration> get positionStream => _player.stream.position;
   Stream<Duration> get durationStream => _player.stream.duration;
+  Duration get position => _player.state.position;
+  Duration get duration => _player.state.duration;
 
   Future<void> initialize() async {
     await StreamProxyServer().start();
@@ -56,6 +58,10 @@ class PlayerService {
 
   Future<void> pause() async {
     await _player.pause();
+  }
+
+  Future<void> resume() async {
+    await _player.play();
   }
 
   Future<void> stop() async {

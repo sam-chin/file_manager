@@ -58,13 +58,11 @@ class StreamProxyServer {
           ..close();
       }
     } catch (e) {
-      if (!request.response.done) {
-        try {
-          request.response
-            ..statusCode = HttpStatus.internalServerError
-            ..close();
-        } catch (_) {}
-      }
+      try {
+        request.response
+          ..statusCode = HttpStatus.internalServerError
+          ..close();
+      } catch (_) {}
     }
   }
 
@@ -72,6 +70,7 @@ class StreamProxyServer {
     final response = request.response;
     final encodedPath = request.uri.path.substring('/smb/'.length);
     final filePath = Uri.decodeComponent(encodedPath);
+    bool isResponseClosed = false;
 
     try {
       if (!SmbService().isConnected) {
@@ -124,13 +123,18 @@ class StreamProxyServer {
       }
 
       await _streamFileContent(request, response, filePath, start, end);
+      isResponseClosed = true;
     } on RangeNotSatisfiableException {
-      response
-        ..statusCode = HttpStatus.requestedRangeNotSatisfiable
-        ..headers.set(HttpHeaders.contentRangeHeader, 'bytes */${fileInfo?.size ?? 0}')
-        ..close();
+      if (!isResponseClosed) {
+        try {
+          response
+            ..statusCode = HttpStatus.requestedRangeNotSatisfiable
+            ..headers.set(HttpHeaders.contentRangeHeader, 'bytes */0')
+            ..close();
+        } catch (_) {}
+      }
     } catch (e) {
-      if (!response.done) {
+      if (!isResponseClosed) {
         try {
           response
             ..statusCode = HttpStatus.internalServerError
@@ -177,6 +181,7 @@ class StreamProxyServer {
     int bytesToSend = end - start + 1;
     int bytesSent = 0;
     bool needsSkip = start > 0;
+    bool shouldCancel = false;
 
     try {
       final fileStream = SmbService().openFileStream(filePath);
@@ -184,18 +189,18 @@ class StreamProxyServer {
 
       subscription = fileStream.listen(
         (chunk) async {
-          if (response.done || completer.isCompleted) {
+          if (shouldCancel || completer.isCompleted) {
             return;
           }
 
-          subscription?.pause();
+          subscription!.pause();
 
           try {
             if (needsSkip && bytesSkipped < start) {
               final remainingToSkip = start - bytesSkipped;
               if (chunk.length <= remainingToSkip) {
                 bytesSkipped += chunk.length;
-                subscription?.resume();
+                subscription!.resume();
                 return;
               } else {
                 final skippedChunk = chunk.sublist(remainingToSkip);
@@ -225,7 +230,7 @@ class StreamProxyServer {
             if (bytesToSend <= 0) {
               completer.complete();
             } else {
-              subscription?.resume();
+              subscription!.resume();
             }
           } catch (e) {
             if (!completer.isCompleted) {
@@ -260,6 +265,7 @@ class StreamProxyServer {
     } on TimeoutException {
     } catch (e) {
     } finally {
+      shouldCancel = true;
       _activeSubscriptions.remove(requestId);
       await subscription?.cancel();
     }

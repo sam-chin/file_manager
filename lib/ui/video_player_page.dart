@@ -43,8 +43,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       ),
     );
 
-    final proxyUrl = StreamProxyServer().getSmbProxyUrl(widget.filePath);
-    await _playerService.play(proxyUrl);
+    await _playerService.playVideo(
+      widget.filePath,
+      fileName: widget.fileName,
+      serverId: widget.server.id,
+    );
 
     setState(() {
       _isInitialized = true;
