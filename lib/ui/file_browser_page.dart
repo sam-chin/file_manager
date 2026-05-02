@@ -13,7 +13,7 @@ class FileBrowserPage extends StatefulWidget {
 }
 
 class _FileBrowserPageState extends State<FileBrowserPage> {
-  List<SmbFileInfo> _files = [];
+  List<FileEntity> _files = [];
   bool _isLoading = false;
   bool _isConnected = false;
   String _currentPath = '';
@@ -57,9 +57,22 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     });
 
     try {
-      final files = await SmbService().listFiles(path);
+      final files = await SmbService().listFiles(path, filterVideos: true);
+      
+      // 如果不是根目录，添加返回上一级的选项
+      final List<FileEntity> allFiles = [];
+      if (path.isNotEmpty) {
+        allFiles.add(FileEntity(
+          name: '..',
+          path: path,
+          size: 0,
+          isDirectory: true,
+        ));
+      }
+      allFiles.addAll(files);
+      
       setState(() {
-        _files = files;
+        _files = allFiles;
         _currentPath = path;
       });
     } catch (e) {
@@ -133,22 +146,42 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                         final file = _files[index];
                         return ListTile(
                           leading: Icon(
-                            Icons.video_library,
-                            color: Theme.of(context).colorScheme.primary,
+                            file.isDirectory ? Icons.folder : Icons.video_library,
+                            color: file.isDirectory 
+                                ? Colors.orange 
+                                : Theme.of(context).colorScheme.primary,
                           ),
                           title: Text(file.name),
-                          subtitle: Text(_formatSize(file.size)),
+                          subtitle: Text(
+                            file.isDirectory ? '' : _formatSize(file.size),
+                          ),
                           onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => VideoPlayerPage(
-                                  server: widget.server,
-                                  filePath: '$_currentPath/${file.name}',
-                                  fileName: file.name,
+                            if (file.name == '..') {
+                              // 返回上一级
+                              final parentPath = _getParentPath(_currentPath);
+                              _loadFiles(parentPath);
+                            } else if (file.isDirectory) {
+                              // 进入子目录
+                              final newPath = _currentPath.isEmpty 
+                                  ? file.name 
+                                  : '$_currentPath/${file.name}';
+                              _loadFiles(newPath);
+                            } else {
+                              // 播放视频
+                              final filePath = _currentPath.isEmpty 
+                                  ? file.name 
+                                  : '$_currentPath/${file.name}';
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => VideoPlayerPage(
+                                    server: widget.server,
+                                    filePath: filePath,
+                                    fileName: file.name,
+                                  ),
                                 ),
-                              ),
-                            );
+                              );
+                            }
                           },
                         );
                       },
@@ -161,5 +194,10 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  String _getParentPath(String path) {
+    if (!path.contains('/')) return '';
+    return path.substring(0, path.lastIndexOf('/'));
   }
 }

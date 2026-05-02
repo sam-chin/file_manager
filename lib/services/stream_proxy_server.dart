@@ -53,9 +53,11 @@ class StreamProxyServer {
       if (path.startsWith('/smb/')) {
         await _handleSmbRequest(request);
       } else {
-        request.response
-          ..statusCode = HttpStatus.notFound
-          ..close();
+        try {
+          request.response
+            ..statusCode = HttpStatus.notFound
+            ..close();
+        } catch (_) {}
       }
     } catch (e) {
       try {
@@ -70,28 +72,34 @@ class StreamProxyServer {
     final response = request.response;
     final encodedPath = request.uri.path.substring('/smb/'.length);
     final filePath = Uri.decodeComponent(encodedPath);
-    bool isResponseClosed = false;
+    bool responseSent = false;
 
     try {
       if (!SmbService().isConnected) {
-        response
-          ..statusCode = HttpStatus.serviceUnavailable
-          ..close();
+        try {
+          response
+            ..statusCode = HttpStatus.serviceUnavailable
+            ..close();
+        } catch (_) {}
         return;
       }
 
       final fileInfo = await SmbService().getFileInfo(filePath);
       if (fileInfo == null) {
-        response
-          ..statusCode = HttpStatus.notFound
-          ..close();
+        try {
+          response
+            ..statusCode = HttpStatus.notFound
+            ..close();
+        } catch (_) {}
         return;
       }
 
       if (fileInfo.isDirectory) {
-        response
-          ..statusCode = HttpStatus.forbidden
-          ..close();
+        try {
+          response
+            ..statusCode = HttpStatus.forbidden
+            ..close();
+        } catch (_) {}
         return;
       }
 
@@ -123,9 +131,9 @@ class StreamProxyServer {
       }
 
       await _streamFileContent(request, response, filePath, start, end);
-      isResponseClosed = true;
+      responseSent = true;
     } on RangeNotSatisfiableException {
-      if (!isResponseClosed) {
+      if (!responseSent) {
         try {
           response
             ..statusCode = HttpStatus.requestedRangeNotSatisfiable
@@ -134,7 +142,7 @@ class StreamProxyServer {
         } catch (_) {}
       }
     } catch (e) {
-      if (!isResponseClosed) {
+      if (!responseSent) {
         try {
           response
             ..statusCode = HttpStatus.internalServerError
@@ -179,12 +187,11 @@ class StreamProxyServer {
     StreamSubscription<List<int>>? subscription;
     int bytesSkipped = 0;
     int bytesToSend = end - start + 1;
-    int bytesSent = 0;
     bool needsSkip = start > 0;
     bool shouldCancel = false;
 
     try {
-      final fileStream = SmbService().openFileStream(filePath);
+      final fileStream = await SmbService().openInputStream(filePath);
       final completer = Completer<void>();
 
       subscription = fileStream.listen(
@@ -212,9 +219,10 @@ class StreamProxyServer {
                       ? skippedChunk
                       : skippedChunk.sublist(0, bytesToSend);
 
-                  await response.addStream(Stream.value(chunkToSend));
-                  bytesSent += chunkToSend.length;
-                  bytesToSend -= chunkToSend.length;
+                  try {
+                    await response.addStream(Stream.value(chunkToSend));
+                    bytesToSend -= chunkToSend.length;
+                  } catch (_) {}
                 }
               }
             } else {
@@ -222,9 +230,10 @@ class StreamProxyServer {
                   ? chunk
                   : chunk.sublist(0, bytesToSend);
 
-              await response.addStream(Stream.value(chunkToSend));
-              bytesSent += chunkToSend.length;
-              bytesToSend -= chunkToSend.length;
+              try {
+                await response.addStream(Stream.value(chunkToSend));
+                bytesToSend -= chunkToSend.length;
+              } catch (_) {}
             }
 
             if (bytesToSend <= 0) {
@@ -260,28 +269,32 @@ class StreamProxyServer {
         },
       );
 
-      await response.flush();
-      await response.close();
+      try {
+        await response.flush();
+        await response.close();
+      } catch (_) {}
     } on TimeoutException {
     } catch (e) {
     } finally {
       shouldCancel = true;
       _activeSubscriptions.remove(requestId);
-      await subscription?.cancel();
+      try {
+        await subscription?.cancel();
+      } catch (_) {}
     }
   }
 
   String _getContentType(String filePath) {
-    final lowerPath = filePath.toLowerCase();
+    final lower = filePath.toLowerCase();
 
-    if (lowerPath.endsWith('.mp4')) return 'video/mp4';
-    if (lowerPath.endsWith('.mkv')) return 'video/x-matroska';
-    if (lowerPath.endsWith('.avi')) return 'video/x-msvideo';
-    if (lowerPath.endsWith('.mov')) return 'video/quicktime';
-    if (lowerPath.endsWith('.webm')) return 'video/webm';
-    if (lowerPath.endsWith('.flv')) return 'video/x-flv';
-    if (lowerPath.endsWith('.wmv')) return 'video/x-ms-wmv';
-    if (lowerPath.endsWith('.m4v')) return 'video/x-m4v';
+    if (lower.endsWith('.mp4')) return 'video/mp4';
+    if (lower.endsWith('.mkv')) return 'video/x-matroska';
+    if (lower.endsWith('.avi')) return 'video/x-msvideo';
+    if (lower.endsWith('.mov')) return 'video/quicktime';
+    if (lower.endsWith('.webm')) return 'video/webm';
+    if (lower.endsWith('.flv')) return 'video/x-flv';
+    if (lower.endsWith('.wmv')) return 'video/x-ms-wmv';
+    if (lower.endsWith('.m4v')) return 'video/x-m4v';
 
     return 'application/octet-stream';
   }

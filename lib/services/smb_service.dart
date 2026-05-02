@@ -1,14 +1,27 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:smb_connect/smb_connect.dart';
-import '../entities/base_file_entity.dart';
+
+class FileEntity {
+  final String name;
+  final String path;
+  final int size;
+  final bool isDirectory;
+
+  FileEntity({
+    required this.name,
+    required this.path,
+    required this.size,
+    this.isDirectory = false,
+  });
+}
 
 class SmbService {
   static final SmbService _instance = SmbService._internal();
   factory SmbService() => _instance;
   SmbService._internal();
 
-  SmbClient? _client;
+  dynamic _connection;
   bool _isConnected = false;
   String? _connectedHost;
   String? _connectedShare;
@@ -28,7 +41,14 @@ class SmbService {
     try {
       await disconnect();
 
-      _client = SmbClient(
+      final config = Configuration();
+      final auth = NtlmPasswordAuthenticator(
+        domain: domain ?? 'WORKGROUP',
+        username: username ?? 'guest',
+        password: password ?? '',
+      );
+
+      _connection = SmbClient(
         host: host,
         share: share,
         domain: domain ?? 'WORKGROUP',
@@ -36,7 +56,7 @@ class SmbService {
         password: password ?? '',
       );
 
-      await _client!.connect().timeout(timeout);
+      await (_connection as SmbClient).connect().timeout(timeout);
 
       _isConnected = true;
       _connectedHost = host;
@@ -45,15 +65,15 @@ class SmbService {
       return true;
     } on TimeoutException {
       _isConnected = false;
-      _client = null;
+      _connection = null;
       return false;
     } on SocketException {
       _isConnected = false;
-      _client = null;
+      _connection = null;
       return false;
     } catch (e) {
       _isConnected = false;
-      _client = null;
+      _connection = null;
       return false;
     }
   }
@@ -64,44 +84,42 @@ class SmbService {
       _connectedHost = null;
       _connectedShare = null;
 
-      if (_client != null) {
-        await _client!.disconnect();
-        _client = null;
+      if (_connection != null) {
+        await (_connection as SmbClient).disconnect();
+        _connection = null;
       }
     } catch (e) {
-      _client = null;
+      _connection = null;
     }
   }
 
-  Future<List<BaseFileEntity>> listFiles(
+  Future<List<FileEntity>> listFiles(
     String path, {
     bool recursive = false,
     bool filterVideos = false,
   }) async {
-    if (!_isConnected || _client == null) {
+    if (!_isConnected || _connection == null) {
       throw StateError('Not connected to SMB server');
     }
 
-    final List<BaseFileEntity> result = [];
+    final List<FileEntity> result = [];
 
     try {
-      final items = await _client!.listDirectory(path).timeout(
+      final items = await (_connection as SmbClient).listDirectory(path).timeout(
         const Duration(seconds: 30),
       );
 
       for (final item in items) {
-        final fileType = item.isDirectory ? FileType.directory : FileType.file;
         final filePath = path.isEmpty ? item.name : '$path/${item.name}';
 
-        final entity = BaseFileEntity(
+        final entity = FileEntity(
           name: item.name,
           path: filePath,
-          type: fileType,
           size: item.isDirectory ? 0 : item.fileSize,
-          modifiedTime: item.lastWriteTime,
+          isDirectory: item.isDirectory,
         );
 
-        if (!filterVideos || entity.isVideo || entity.isDirectory) {
+        if (!filterVideos || _isVideoFile(entity.name) || entity.isDirectory) {
           result.add(entity);
         }
 
@@ -132,8 +150,8 @@ class SmbService {
     }
   }
 
-  Future<BaseFileEntity?> getFileInfo(String path) async {
-    if (!_isConnected || _client == null) {
+  Future<FileEntity?> getFileInfo(String path) async {
+    if (!_isConnected || _connection == null) {
       throw StateError('Not connected to SMB server');
     }
 
@@ -141,53 +159,45 @@ class SmbService {
       final parentPath = _getParentPath(path);
       final fileName = _getFileName(path);
 
-      final items = await _client!.listDirectory(parentPath).timeout(
+      final items = await (_connection as SmbClient).listDirectory(parentPath).timeout(
         const Duration(seconds: 30),
       );
 
       final targetItem = items.where((item) => item.name == fileName).firstOrNull;
       if (targetItem == null) return null;
 
-      return BaseFileEntity(
+      return FileEntity(
         name: targetItem.name,
         path: path,
-        type: targetItem.isDirectory ? FileType.directory : FileType.file,
         size: targetItem.isDirectory ? 0 : targetItem.fileSize,
-        modifiedTime: targetItem.lastWriteTime,
+        isDirectory: targetItem.isDirectory,
       );
     } catch (e) {
       return null;
     }
   }
 
-  Stream<List<int>> openFileStream(String path) {
-    if (!_isConnected || _client == null) {
+  Future<Stream<List<int>>> openInputStream(String path) async {
+    if (!_isConnected || _connection == null) {
       throw StateError('Not connected to SMB server');
     }
 
-    final controller = StreamController<List<int>>();
+    try {
+      return (_connection as SmbClient).openFileRead(path);
+    } catch (e) {
+      rethrow;
+    }
+  }
 
-    () async {
-      try {
-        final fileStream = _client!.openFileRead(path);
-
-        await for (final chunk in fileStream) {
-          if (controller.isClosed) break;
-          controller.add(chunk);
-        }
-
-        if (!controller.isClosed) {
-          await controller.close();
-        }
-      } catch (e) {
-        if (!controller.isClosed) {
-          controller.addError(e);
-          await controller.close();
-        }
+  bool _isVideoFile(String fileName) {
+    final lower = fileName.toLowerCase();
+    const videoExtensions = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'iso', 'm4v'];
+    for (final ext in videoExtensions) {
+      if (lower.endsWith('.$ext')) {
+        return true;
       }
-    }();
-
-    return controller.stream;
+    }
+    return false;
   }
 
   String _getParentPath(String path) {
