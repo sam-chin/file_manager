@@ -20,10 +20,10 @@ dependencies:
   # FTP 建议设为 any，让系统自动平衡
   ftpconnect: any
 
-  # 播放引擎 - any 绕过版本死锁
-  media_kit: any
-  media_kit_video: any
-  media_kit_libs_android_video: any
+  # 播放引擎 - 简单兼容配置，让 pub get 成功
+  media_kit: ^1.1.10
+  media_kit_video: ^1.2.5
+  media_kit_libs_android_video: ^1.3.0
 
   # 其他基础库
   isar: ^3.1.0
@@ -45,9 +45,7 @@ dev_dependencies:
   isar_generator: 3.1.0
   build_runner: 2.4.8
 
-# 强制覆盖，使用 1.2.4，保守稳定版，避开 SDK 36
-dependency_overrides:
-  media_kit_libs_android_video: 1.2.4
+
 
 flutter:
   uses-material-design: true
