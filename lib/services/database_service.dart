@@ -35,10 +35,10 @@ class DatabaseService {
     });
   }
 
-  static Future<PlaybackHistory?> getPlaybackHistory(String filePath) async {
+  static Future<PlaybackHistory?> getPlaybackHistory(String fileUrl) async {
     return isar.playbackHistorys
         .filter()
-        .filePathEqualTo(filePath)
+        .fileUrlEqualTo(fileUrl)
         .findFirst();
   }
 
@@ -54,6 +54,16 @@ class DatabaseService {
     await isar.writeTxn(() async {
       await isar.playbackHistorys.put(history);
     });
+  }
+
+  static Future<void> updatePlaybackPosition(String fileUrl, Duration position) async {
+    final history = await getPlaybackHistory(fileUrl);
+    if (history != null) {
+      history.position = position;
+      history.lastPlayed = DateTime.now();
+      history.playCount++;
+      await savePlaybackHistory(history);
+    }
   }
 
   static Future<List<CachedFile>> getCachedFiles(int serverId) async {
