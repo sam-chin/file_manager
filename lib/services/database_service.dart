@@ -35,7 +35,7 @@ class DatabaseService {
     });
   }
 
-  static Future<List<PlaybackHistory?>> getPlaybackHistory(String filePath) async {
+  static Future<PlaybackHistory?> getPlaybackHistory(String filePath) async {
     return isar.playbackHistorys
         .filter()
         .filePathEqualTo(filePath)

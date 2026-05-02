@@ -1,95 +1,214 @@
 import 'dart:async';
+import 'dart:collection';
 import 'package:dlna_dart/dlna_dart.dart';
+import '../entities/device_entity.dart';
 
 class DlnaService {
   static final DlnaService _instance = DlnaService._internal();
   factory DlnaService() => _instance;
   DlnaService._internal();
 
-  Dlna? _dlna;
+  DlnaManager? _dlnaManager;
   DlnaDevice? _currentDevice;
-  final StreamController<List<DlnaDevice>> _devicesController =
+  final Map<String, DeviceEntity> _discoveredDevices = HashMap();
+  final StreamController<List<DeviceEntity>> _devicesController =
       StreamController.broadcast();
-  final List<DlnaDevice> _devices = [];
+  Timer? _refreshTimer;
+  bool _isSearching = false;
 
-  Stream<List<DlnaDevice>> get devicesStream => _devicesController.stream;
-  List<DlnaDevice> get devices => List.unmodifiable(_devices);
+  bool get isSearching => _isSearching;
+  List<DeviceEntity> get devices => List.unmodifiable(_discoveredDevices.values);
+  Stream<List<DeviceEntity>> get devicesStream => _devicesController.stream;
+  DeviceEntity? get currentDevice => _currentDevice != null
+      ? _dlnaDeviceToEntity(_currentDevice!)
+      : null;
 
-  Future<void> startDiscovery() async {
-    _dlna = Dlna();
-    _dlna!.search((device) {
-      if (!_devices.any((d) => d.uuid == device.uuid)) {
-        _devices.add(device);
-        _devicesController.add(List.unmodifiable(_devices));
+  Future<void> initialize() async {
+    if (_dlnaManager != null) return;
+
+    _dlnaManager = DlnaManager();
+    _dlnaManager!.setDeviceListChangeCallback(_onDeviceListChanged);
+  }
+
+  Future<void> startSearch({Duration duration = const Duration(seconds: 10)}) async {
+    if (_isSearching || _dlnaManager == null) return;
+
+    try {
+      _isSearching = true;
+      _discoveredDevices.clear();
+      _devicesController.add([]);
+
+      await _dlnaManager!.startSearch();
+
+      _refreshTimer?.cancel();
+      _refreshTimer = Timer(duration, () {
+        stopSearch();
+      });
+    } catch (e) {
+      _isSearching = false;
+    }
+  }
+
+  Future<void> stopSearch() async {
+    if (_dlnaManager == null) return;
+
+    try {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+      await _dlnaManager!.stopSearch();
+    } finally {
+      _isSearching = false;
+    }
+  }
+
+  Future<bool> selectDevice(DeviceEntity device) async {
+    if (_dlnaManager == null) return false;
+
+    try {
+      final dlnaDevices = _dlnaManager!.getDlnaDeviceList();
+      _currentDevice = dlnaDevices.firstWhere(
+        (d) => _deviceId(d) == device.id,
+        orElse: () => null,
+      );
+
+      if (_currentDevice != null) {
+        await _currentDevice!.setTransportUrl('');
+        return true;
       }
-    });
+      return false;
+    } catch (e) {
+      _currentDevice = null;
+      return false;
+    }
   }
 
-  void stopDiscovery() {
-    _dlna?.stop();
+  Future<void> clearSelectedDevice() async {
+    try {
+      if (_currentDevice != null) {
+        await _currentDevice!.stop();
+      }
+    } finally {
+      _currentDevice = null;
+    }
   }
 
-  Future<void> selectDevice(DlnaDevice device) async {
-    _currentDevice = device;
+  Future<bool> setUrl(String url) async {
+    if (_currentDevice == null) return false;
+
+    try {
+      await _currentDevice!.setTransportUrl(url);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> setUrl(String url) async {
-    if (_currentDevice == null) return;
-    await _currentDevice!.setUrl(url);
+  Future<bool> play() async {
+    if (_currentDevice == null) return false;
+
+    try {
+      await _currentDevice!.play();
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> play() async {
-    if (_currentDevice == null) return;
-    await _currentDevice!.play();
+  Future<bool> pause() async {
+    if (_currentDevice == null) return false;
+
+    try {
+      await _currentDevice!.pause();
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> pause() async {
-    if (_currentDevice == null) return;
-    await _currentDevice!.pause();
+  Future<bool> stop() async {
+    if (_currentDevice == null) return false;
+
+    try {
+      await _currentDevice!.stop();
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> stop() async {
-    if (_currentDevice == null) return;
-    await _currentDevice!.stop();
-  }
+  Future<bool> seek(Duration position) async {
+    if (_currentDevice == null) return false;
 
-  Future<void> seek(Duration position) async {
-    if (_currentDevice == null) return;
-    await _currentDevice!.seek(position);
+    try {
+      final seconds = position.inSeconds;
+      await _currentDevice!.seek(seconds);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   Future<Duration?> getPosition() async {
     if (_currentDevice == null) return null;
-    return _currentDevice!.position;
+
+    try {
+      final info = await _currentDevice!.getMediaInfo();
+      if (info.currentPosition != null) {
+        return Duration(seconds: info.currentPosition!);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
 
   Future<Duration?> getDuration() async {
     if (_currentDevice == null) return null;
-    return _currentDevice!.duration;
+
+    try {
+      final info = await _currentDevice!.getMediaInfo();
+      if (info.mediaDuration != null) {
+        return Duration(seconds: info.mediaDuration!);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
 
-  void dispose() {
-    _devicesController.close();
-    stopDiscovery();
+  void _onDeviceListChanged() {
+    if (_dlnaManager == null) return;
+
+    final dlnaDevices = _dlnaManager!.getDlnaDeviceList();
+
+    for (final device in dlnaDevices) {
+      final entity = _dlnaDeviceToEntity(device);
+      _discoveredDevices[entity.id] = entity;
+    }
+
+    _devicesController.add(devices);
   }
-}
 
-class DlnaDevice {
-  final String uuid;
-  final String name;
-  final String location;
+  DeviceEntity _dlnaDeviceToEntity(DlnaDevice device) {
+    return DeviceEntity(
+      id: _deviceId(device),
+      name: device.friendlyName ?? 'Unknown Device',
+      location: device.location ?? '',
+      udn: device.udn,
+      manufacturer: device.manufacturer,
+      modelName: device.modelName,
+    );
+  }
 
-  DlnaDevice({
-    required this.uuid,
-    required this.name,
-    required this.location,
-  });
+  String _deviceId(DlnaDevice device) {
+    return device.udn ?? device.location ?? device.friendlyName ?? '';
+  }
 
-  Future<void> setUrl(String url) async {}
-  Future<void> play() async {}
-  Future<void> pause() async {}
-  Future<void> stop() async {}
-  Future<void> seek(Duration position) async {}
-  Future<Duration?> get position async => null;
-  Future<Duration?> get duration async => null;
+  Future<void> dispose() async {
+    await stopSearch();
+    await clearSelectedDevice();
+    await _devicesController.close();
+    _discoveredDevices.clear();
+    _dlnaManager = null;
+  }
 }
