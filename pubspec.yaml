@@ -20,10 +20,10 @@ dependencies:
   # FTP 建议设为 any，让系统自动平衡
   ftpconnect: any
 
-  # 播放引擎
-  media_kit: ^1.1.10
-  media_kit_video: ^1.2.4
-  media_kit_libs_android_video: ^1.0.8
+  # 播放引擎 - 锁定稳定版，避免强制 SDK 36
+  media_kit: 1.1.10
+  media_kit_video: 1.2.4
+  media_kit_libs_android_video: 1.0.8
 
   # 其他基础库
   isar: ^3.1.0
