@@ -1,3 +1,27 @@
+// 强制所有第三方插件使用 SDK 34 编译，绕过 SDK 36 的坑
+subprojects {
+    // 拦截插件依赖
+    project.configurations.all {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'com.android.tools.build' && details.requested.name == 'gradle') {
+                details.useVersion '7.4.2'
+            }
+        }
+    }
+
+    // 直接强制修改编译版本（不需要 afterEvaluate）
+    if (project.hasProperty('android')) {
+        project.android {
+            compileSdkVersion 34
+            buildToolsVersion "34.0.0"
+            
+            defaultConfig {
+                targetSdkVersion 34
+            }
+        }
+    }
+}
+
 buildscript {
     ext.kotlin_version = '1.9.0'
     repositories {
@@ -23,22 +47,6 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(':app')
-}
-
-// 强制所有第三方插件使用 SDK 34 编译，绕过 SDK 36 的坑
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                compileSdkVersion 34
-                buildToolsVersion "34.0.0"
-                
-                defaultConfig {
-                    targetSdkVersion 34
-                }
-            }
-        }
-    }
 }
 
 tasks.register("clean", Delete) {
