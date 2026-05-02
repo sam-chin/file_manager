@@ -96,51 +96,25 @@ class StreamProxyServer {
         return;
       }
 
-      final range = request.headers.value(HttpHeaders.rangeHeader);
       final fileSize = fileInfo.size;
-
       int start = 0;
       int end = fileSize - 1;
       bool isPartial = false;
 
-      if (range != null && range.startsWith('bytes=')) {
-        final rangePart = range.substring(6);
-        final parts = rangePart.split('-');
-
-        if (parts.length >= 1) {
-          final startStr = parts[0];
-          if (startStr.isNotEmpty) {
-            start = int.tryParse(startStr) ?? 0;
-          }
-        }
-
-        if (parts.length >= 2) {
-          final endStr = parts[1];
-          if (endStr.isNotEmpty) {
-            end = int.tryParse(endStr) ?? (fileSize - 1);
-          }
-        }
-
-        if (start < 0) start = 0;
-        if (end >= fileSize) end = fileSize - 1;
-        if (start > end) {
-          response
-            ..statusCode = HttpStatus.requestedRangeNotSatisfiable
-            ..headers.set(HttpHeaders.contentRangeHeader, 'bytes */$fileSize')
-            ..close();
-          return;
-        }
-
+      final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
+      if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
         isPartial = true;
+        final range = _parseRange(rangeHeader, fileSize);
+        start = range.$1;
+        end = range.$2;
       }
 
       final contentLength = end - start + 1;
 
-      response
-        ..statusCode = isPartial ? HttpStatus.partialContent : HttpStatus.ok
-        ..headers.set(HttpHeaders.acceptRangesHeader, 'bytes')
-        ..headers.set(HttpHeaders.contentTypeHeader, _getContentType(filePath))
-        ..headers.set(HttpHeaders.contentLengthHeader, contentLength);
+      response.statusCode = isPartial ? HttpStatus.partialContent : HttpStatus.ok;
+      response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
+      response.headers.set(HttpHeaders.contentTypeHeader, _getContentType(filePath));
+      response.headers.set(HttpHeaders.contentLengthHeader, contentLength);
 
       if (isPartial) {
         response.headers.set(
@@ -150,6 +124,11 @@ class StreamProxyServer {
       }
 
       await _streamFileContent(request, response, filePath, start, end);
+    } on RangeNotSatisfiableException {
+      response
+        ..statusCode = HttpStatus.requestedRangeNotSatisfiable
+        ..headers.set(HttpHeaders.contentRangeHeader, 'bytes */${fileInfo?.size ?? 0}')
+        ..close();
     } catch (e) {
       if (!response.done) {
         try {
@@ -161,6 +140,30 @@ class StreamProxyServer {
     }
   }
 
+  (int, int) _parseRange(String rangeHeader, int fileSize) {
+    final rangeStr = rangeHeader.substring(6);
+    final parts = rangeStr.split('-');
+
+    int start = 0;
+    int end = fileSize - 1;
+
+    if (parts[0].isNotEmpty) {
+      start = int.tryParse(parts[0]) ?? 0;
+    }
+
+    if (parts.length > 1 && parts[1].isNotEmpty) {
+      end = int.tryParse(parts[1]) ?? fileSize - 1;
+    }
+
+    if (start < 0) start = 0;
+    if (end >= fileSize) end = fileSize - 1;
+    if (start > end) {
+      throw RangeNotSatisfiableException();
+    }
+
+    return (start, end);
+  }
+
   Future<void> _streamFileContent(
     HttpRequest request,
     HttpResponse response,
@@ -170,13 +173,13 @@ class StreamProxyServer {
   ) async {
     final requestId = DateTime.now().millisecondsSinceEpoch.toString();
     StreamSubscription<List<int>>? subscription;
-    int bytesToSkip = start;
+    int bytesSkipped = 0;
     int bytesToSend = end - start + 1;
     int bytesSent = 0;
+    bool needsSkip = start > 0;
 
     try {
       final fileStream = SmbService().openFileStream(filePath);
-
       final completer = Completer<void>();
 
       subscription = fileStream.listen(
@@ -188,14 +191,16 @@ class StreamProxyServer {
           subscription?.pause();
 
           try {
-            if (bytesToSkip > 0) {
-              if (chunk.length <= bytesToSkip) {
-                bytesToSkip -= chunk.length;
+            if (needsSkip && bytesSkipped < start) {
+              final remainingToSkip = start - bytesSkipped;
+              if (chunk.length <= remainingToSkip) {
+                bytesSkipped += chunk.length;
                 subscription?.resume();
                 return;
               } else {
-                final skippedChunk = chunk.sublist(bytesToSkip);
-                bytesToSkip = 0;
+                final skippedChunk = chunk.sublist(remainingToSkip);
+                bytesSkipped = start;
+                needsSkip = false;
 
                 if (skippedChunk.isNotEmpty) {
                   final chunkToSend = skippedChunk.length <= bytesToSend
@@ -281,4 +286,8 @@ class StreamProxyServer {
     final encodedPath = Uri.encodeComponent(smbPath);
     return '$baseUrl/smb/$encodedPath';
   }
+}
+
+class RangeNotSatisfiableException implements Exception {
+  RangeNotSatisfiableException();
 }

@@ -13,7 +13,7 @@ dependencies:
   
   dlna_dart: 0.1.0
   smb_connect: ^0.0.9
-  ftpconnect: ^2.5.0
+  ftpconnect: any
   media_kit: ^1.1.10
   media_kit_video: ^1.2.4
   media_kit_libs_android_video: ^1.0.8
