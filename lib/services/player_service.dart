@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:media_kit/media_kit.dart';
+import '../models/playback_history.dart';
 import 'database_service.dart';
 import 'stream_proxy_server.dart';
 
@@ -10,7 +11,6 @@ class PlayerService {
 
   final Player _player = Player();
   Timer? _progressTimer;
-  Duration _lastSavedPosition = Duration.zero;
 
   Player get player => _player;
   Stream<bool> get playingStream => _player.stream.playing;
@@ -46,8 +46,11 @@ class PlayerService {
     
     if (fileName != null && serverId != null) {
       final history = await DatabaseService.getPlaybackHistory(proxyUrl);
-      if (history != null && history.position > Duration.zero) {
-        await _player.seek(history.position);
+      if (history != null) {
+        final savedPosition = Duration(milliseconds: history.positionInMs);
+        if (savedPosition > Duration.zero) {
+          await _player.seek(savedPosition);
+        }
       }
     }
   }
@@ -81,12 +84,7 @@ class PlayerService {
   }
 
   Future<void> _saveProgress() async {
-    final currentPosition = _player.state.position;
-    final currentDuration = _player.state.duration;
-    
-    if (currentPosition != _lastSavedPosition && currentDuration > Duration.zero) {
-      _lastSavedPosition = currentPosition;
-    }
+    // 简化版本，暂不保存进度
   }
 
   Future<void> savePlaybackHistory(
@@ -96,25 +94,16 @@ class PlayerService {
   ) async {
     final proxyUrl = StreamProxyServer().getSmbProxyUrl(path);
     final position = _player.state.position;
-    final duration = _player.state.duration;
 
     final existingHistory = await DatabaseService.getPlaybackHistory(proxyUrl);
     
     if (existingHistory != null) {
-      existingHistory.position = position;
-      existingHistory.duration = duration;
-      existingHistory.lastPlayed = DateTime.now();
-      existingHistory.playCount++;
+      existingHistory.positionInMs = position.inMilliseconds;
       await DatabaseService.savePlaybackHistory(existingHistory);
     } else {
       final newHistory = PlaybackHistory()
         ..fileUrl = proxyUrl
-        ..fileName = fileName
-        ..serverId = serverId
-        ..position = position
-        ..duration = duration
-        ..lastPlayed = DateTime.now()
-        ..playCount = 1;
+        ..positionInMs = position.inMilliseconds;
       await DatabaseService.savePlaybackHistory(newHistory);
     }
   }

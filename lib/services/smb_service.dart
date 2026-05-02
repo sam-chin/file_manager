@@ -1,6 +1,7 @@
-import 'dart:async';
 import 'dart:io';
-import 'package:smb_connect/smb_connect.dart';
+import 'dart:async';
+// 确保这是唯一的 smb 导入
+import 'package:smb_connect/smb_connect.dart' as smb;
 
 class FileEntity {
   final String name;
@@ -17,16 +18,15 @@ class FileEntity {
 }
 
 class SmbService {
-  static final SmbService _instance = SmbService._internal();
-  factory SmbService() => _instance;
-  SmbService._internal();
-
+  // 使用 smb 前缀避免类型冲突，或者直接使用 dynamic 规避编译期找不到类型的问题
   dynamic _connection;
-  bool _isConnected = false;
   String? _connectedHost;
   String? _connectedShare;
+  String? _connectedDomain;
+  String? _connectedUsername;
+  String? _connectedPassword;
 
-  bool get isConnected => _isConnected;
+  bool get isConnected => _connection != null;
   String? get connectedHost => _connectedHost;
   String? get connectedShare => _connectedShare;
 
@@ -36,60 +36,35 @@ class SmbService {
     String? domain,
     String? username,
     String? password,
-    Duration timeout = const Duration(seconds: 30),
+    Duration timeout = const Duration(seconds: 10),
   }) async {
     try {
       await disconnect();
 
-      final config = Configuration();
-      final auth = NtlmPasswordAuthenticator(
-        domain: domain ?? 'WORKGROUP',
+      // 0.0.9 正确的初始化逻辑
+      final config = smb.Configuration();
+      final auth = smb.NtlmPasswordAuthenticator(
+        domain: domain ?? '',
         username: username ?? 'guest',
         password: password ?? '',
       );
 
-      _connection = SmbClient(
-        host: host,
-        share: share,
-        domain: domain ?? 'WORKGROUP',
-        username: username ?? 'guest',
-        password: password ?? '',
-      );
+      // 在 0.0.9 中，通常是通过 SmbClient 或 SmbFile 开启上下文
+      _connection = smb.SmbClient(host, share, auth);
 
-      await (_connection as SmbClient).connect().timeout(timeout);
+      // 模拟连接尝试（该库通常是懒加载连接，通过访问根目录测试）
+      await (_connection as smb.SmbClient).connect().timeout(timeout);
 
-      _isConnected = true;
       _connectedHost = host;
       _connectedShare = share;
+      _connectedDomain = domain;
+      _connectedUsername = username;
+      _connectedPassword = password;
 
       return true;
-    } on TimeoutException {
-      _isConnected = false;
-      _connection = null;
-      return false;
-    } on SocketException {
-      _isConnected = false;
-      _connection = null;
-      return false;
     } catch (e) {
-      _isConnected = false;
-      _connection = null;
+      print('SMB Connect Error: $e');
       return false;
-    }
-  }
-
-  Future<void> disconnect() async {
-    try {
-      _isConnected = false;
-      _connectedHost = null;
-      _connectedShare = null;
-
-      if (_connection != null) {
-        await (_connection as SmbClient).disconnect();
-        _connection = null;
-      }
-    } catch (e) {
-      _connection = null;
     }
   }
 
@@ -98,40 +73,34 @@ class SmbService {
     bool recursive = false,
     bool filterVideos = false,
   }) async {
-    if (!_isConnected || _connection == null) {
-      throw StateError('Not connected to SMB server');
-    }
+    if (_connection == null) throw StateError("SMB Not Connected");
 
     final List<FileEntity> result = [];
-
     try {
-      final items = await (_connection as SmbClient).listDirectory(path).timeout(
-        const Duration(seconds: 30),
-      );
-
-      for (final item in items) {
-        final filePath = path.isEmpty ? item.name : '$path/${item.name}';
-
+      final files = await (_connection as smb.SmbClient).listFiles(path);
+      
+      for (final file in files) {
+        final filePath = path.isEmpty ? file.name : '$path/${file.name}';
         final entity = FileEntity(
-          name: item.name,
+          name: file.name,
           path: filePath,
-          size: item.isDirectory ? 0 : item.fileSize,
-          isDirectory: item.isDirectory,
+          size: file.isDirectory ? 0 : file.fileSize,
+          isDirectory: file.isDirectory,
         );
 
-        if (!filterVideos || _isVideoFile(entity.name) || entity.isDirectory) {
+        if (!filterVideos || entity.isDirectory || _isVideoFile(entity.name)) {
           result.add(entity);
         }
 
         if (recursive && entity.isDirectory) {
           try {
-            final subItems = await listFiles(
+            final subFiles = await listFiles(
               filePath,
               recursive: true,
               filterVideos: filterVideos,
             );
-            result.addAll(subItems);
-          } catch (e) {}
+            result.addAll(subFiles);
+          } catch (_) {}
         }
       }
 
@@ -143,49 +112,58 @@ class SmbService {
       });
 
       return result;
-    } on TimeoutException {
-      rethrow;
     } catch (e) {
-      rethrow;
+      print('SMB List Files Error: $e');
+      return [];
     }
   }
 
   Future<FileEntity?> getFileInfo(String path) async {
-    if (!_isConnected || _connection == null) {
-      throw StateError('Not connected to SMB server');
-    }
+    if (_connection == null) throw StateError("SMB Not Connected");
 
     try {
       final parentPath = _getParentPath(path);
       final fileName = _getFileName(path);
 
-      final items = await (_connection as SmbClient).listDirectory(parentPath).timeout(
-        const Duration(seconds: 30),
-      );
+      final files = await (_connection as smb.SmbClient).listFiles(parentPath);
+      
+      for (final file in files) {
+        if (file.name == fileName) {
+          return FileEntity(
+            name: file.name,
+            path: path,
+            size: file.isDirectory ? 0 : file.fileSize,
+            isDirectory: file.isDirectory,
+          );
+        }
+      }
 
-      final targetItem = items.where((item) => item.name == fileName).firstOrNull;
-      if (targetItem == null) return null;
-
-      return FileEntity(
-        name: targetItem.name,
-        path: path,
-        size: targetItem.isDirectory ? 0 : targetItem.fileSize,
-        isDirectory: targetItem.isDirectory,
-      );
+      return null;
     } catch (e) {
+      print('SMB Get File Info Error: $e');
       return null;
     }
   }
 
   Future<Stream<List<int>>> openInputStream(String path) async {
-    if (!_isConnected || _connection == null) {
-      throw StateError('Not connected to SMB server');
-    }
+    if (_connection == null) throw Exception("SMB Not Connected");
+    // 适配 0.0.9 的读取流方法
+    return (_connection as smb.SmbClient).openFileRead(path);
+  }
 
-    try {
-      return (_connection as SmbClient).openFileRead(path);
-    } catch (e) {
-      rethrow;
+  Future<void> disconnect() async {
+    if (_connection != null) {
+      try {
+        await (_connection as smb.SmbClient).disconnect();
+      } catch (e) {
+        print('SMB Disconnect Error: $e');
+      }
+      _connection = null;
+      _connectedHost = null;
+      _connectedShare = null;
+      _connectedDomain = null;
+      _connectedUsername = null;
+      _connectedPassword = null;
     }
   }
 

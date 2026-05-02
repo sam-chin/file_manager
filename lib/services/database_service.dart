@@ -42,28 +42,10 @@ class DatabaseService {
         .findFirst();
   }
 
-  static Future<List<PlaybackHistory>> getRecentPlaybackHistory({int limit = 20}) async {
-    return isar.playbackHistorys
-        .where()
-        .sortByLastPlayedDesc()
-        .limit(limit)
-        .findAll();
-  }
-
   static Future<void> savePlaybackHistory(PlaybackHistory history) async {
     await isar.writeTxn(() async {
       await isar.playbackHistorys.put(history);
     });
-  }
-
-  static Future<void> updatePlaybackPosition(String fileUrl, Duration position) async {
-    final history = await getPlaybackHistory(fileUrl);
-    if (history != null) {
-      history.position = position;
-      history.lastPlayed = DateTime.now();
-      history.playCount++;
-      await savePlaybackHistory(history);
-    }
   }
 
   static Future<List<CachedFile>> getCachedFiles(int serverId) async {
