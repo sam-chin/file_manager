@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/server_record.dart';
 import '../services/database_service.dart';
 import 'file_browser_page.dart';
+import 'add_server_page.dart';
 
 class ServerListPage extends StatefulWidget {
   const ServerListPage({super.key});
@@ -30,6 +31,26 @@ class _ServerListPageState extends State<ServerListPage> {
 
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('局域网服务器'),
+      ),
+      body: _buildBody(),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddServerPage()),
+          ).then((_) {
+            _loadServers();
+          });
+        },
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -117,7 +138,10 @@ class _ServerListPageState extends State<ServerListPage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => FileBrowserPage(server: server),
+                  builder: (context) => FileBrowserPage(
+                    title: server.name,
+                    server: server,
+                  ),
                 ),
               );
             },
