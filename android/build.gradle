@@ -1,22 +1,29 @@
-// 强制所有第三方插件使用 SDK 34 编译，绕过 SDK 36 的坑
-subprojects {
-    // 拦截插件依赖
-    project.configurations.all {
-        resolutionStrategy.eachDependency { details ->
-            if (details.requested.group == 'com.android.tools.build' && details.requested.name == 'gradle') {
-                details.useVersion '7.4.2'
-            }
+// 放在根目录 android/build.gradle 的最顶部
+allprojects {
+    configurations.all {
+        resolutionStrategy {
+            force 'com.android.support:support-v4:28.0.0'
         }
     }
+}
 
-    // 直接强制修改编译版本（不需要 afterEvaluate）
-    if (project.hasProperty('android')) {
-        project.android {
-            compileSdkVersion 34
-            buildToolsVersion "34.0.0"
-            
-            defaultConfig {
-                targetSdkVersion 34
+// 强力覆盖子插件配置
+subprojects { project ->
+    project.afterEvaluate {
+        if (project.hasProperty('android')) {
+            android {
+                // 强制将 compileSdk 降回 34
+                compileSdkVersion 34
+                buildToolsVersion "34.0.0"
+                
+                defaultConfig {
+                    targetSdkVersion 34
+                }
+                
+                // 关键：跳过那些讨厌的资源检查
+                aaptOptions {
+                    namespaced = false
+                }
             }
         }
     }
