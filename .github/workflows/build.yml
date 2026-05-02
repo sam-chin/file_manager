@@ -26,13 +26,18 @@ jobs:
           flutter-version: '3.19.0'
           cache: true
 
-      - name: Install dependencies
-        run: flutter pub get
+      - name: Force Clean & Install dependencies
+        run: |
+          rm -f pubspec.lock
+          flutter clean
+          flutter pub get
 
       - name: Generate Isar code
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Build APK
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs='-Xmx4g' -Dhttp.connectionTimeout=120000 -Dhttp.socketTimeout=120000"
         run: flutter build apk --release
 
       - name: Upload APK
