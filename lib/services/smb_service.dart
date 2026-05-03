@@ -1,70 +1,46 @@
 import 'dart:async';
 import 'package:smb_connect/smb_connect.dart';
 import '../models/file_item.dart';
+import '../models/server_record.dart';
 
 class SmbService {
-  // 核心：判断是否为目录的位掩码 (0x10)
-  static const int ATTR_DIRECTORY = 0x10;
-
-  SmbClient? _client;
-  String? _currentUrl;
-
-  bool get isConnected => _client != null;
-
-  Future<bool> connect({
-    required String host,
-    required String share,
-    String? domain,
-    String? username,
-    String? password,
-  }) async {
-    try {
-      // 构建 SMB URL
-      final auth = NtlmPasswordAuthenticator(
-        domain: domain ?? "",
-        username: username ?? "guest",
-        password: password ?? "",
-      );
-
-      // 使用官方示例的连接方式
-      final config = PropertiesConfiguration({});
-      _currentUrl = "smb://$host/$share";
-      _client = SmbClient(_currentUrl!, config, auth);
-      return true;
-    } catch (e) {
-      print("SMB Connect Error: $e");
-      return false;
+  // 0.0.9 版本的实现，完全对齐真实 API
+  // 不需要任何 Config 或 Auth 类，认证信息直接在 URL 中
+  
+  Future<List<FileItem>> listFiles(ServerRecord server, String path) async {
+    // 构造 URL：smb://user:password@host/share/path
+    final String userPart = (server.username ?? '');
+    final String passPart = (server.encryptedPassword ?? '');
+    final String sharePart = (server.share ?? '');
+    
+    String authPart = '';
+    if (userPart.isNotEmpty || passPart.isNotEmpty) {
+      authPart = '$userPart:$passPart@';
     }
-  }
+    
+    final String url = "smb://$authPart${server.host}/$sharePart$path";
+    
+    // 0.0.9 直接通过 URL 实例化
+    final client = SmbClient(url);
 
-  Future<List<FileItem>> listFiles(String url) async {
     try {
-      if (_client == null) {
-        throw Exception("Not connected");
-      }
-
-      List<SmbFile> files = await _client!.list();
-
-      return files.map((entity) {
-        // 关键：通过位运算判断是否为文件夹
-        bool isDir = (entity.attributes & ATTR_DIRECTORY) != 0;
-        
-        // 构建完整路径
-        final fullPath = url.isEmpty ? entity.name : "$url/${entity.name}";
+      final List<SmbFile> results = await client.list().timeout(Duration(seconds: 10));
+      
+      return results.map((entity) {
+        // 关键位运算：判断是否为目录
+        final bool isDir = (entity.attributes & 0x10) != 0;
         
         return FileItem(
           name: entity.name,
-          path: fullPath,
-          // 注意：是 fileSize 而不是 size
-          size: entity.fileSize,
-          // 注意：是 lastWriteTime 而不是 modifiedTime
-          modifiedTime: DateTime.fromMillisecondsSinceEpoch(entity.lastWriteTime),
+          path: "$path/${entity.name}".replaceAll("//", "/"),
+          size: entity.size, // 0.0.9 是 size 不是 fileSize
           isDirectory: isDir,
+          modifiedTime: DateTime.fromMillisecondsSinceEpoch(entity.lastModified),
           type: isDir ? FileType.folder : _inferType(entity.name),
         );
       }).toList();
     } catch (e) {
-      print("SMB List Error: $e");
+      print("SMB 连接错误: $e");
       rethrow;
     }
   }
@@ -74,22 +50,9 @@ class SmbService {
     if (parts.length < 2) return FileType.unknown;
     
     final ext = parts.last.toLowerCase();
-    if (['mp4', 'mkv', 'mov', 'avi', 'webm', 'm4v', 'iso'].contains(ext)) {
-      return FileType.video;
-    }
-    if (['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg'].contains(ext)) {
-      return FileType.audio;
-    }
-    if (['jpg', 'jpeg', 'png', 'heic', 'webp', 'gif', 'bmp'].contains(ext)) {
-      return FileType.image;
-    }
-    if (['pdf', 'doc', 'docx', 'txt', 'xlsx', 'pptx'].contains(ext)) {
-      return FileType.document;
-    }
+    if (['mp4', 'mkv', 'mov', 'avi', 'webm', 'm4v'].contains(ext)) return FileType.video;
+    if (['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg'].contains(ext)) return FileType.audio;
+    if (['jpg', 'jpeg', 'png', 'heic', 'webp', 'gif', 'bmp'].contains(ext)) return FileType.image;
     return FileType.unknown;
-  }
-
-  Future<void> disconnect() async {
-    _client = null;
   }
 }

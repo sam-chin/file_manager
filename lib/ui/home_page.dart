@@ -58,30 +58,19 @@ class _HomePageState extends State<HomePage> {
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
-        onSubmitted: (value) {
-          if (value.isNotEmpty && _appService.isConnected) {
-            _searchFiles(value);
+        onSubmitted: (value) async {
+          if (value.isNotEmpty && _appService.hasActiveServer) {
+            // 搜索功能
+            final results = await _appService.browse('');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('找到 ${results.length} 个文件')),
+              );
+            }
           }
         },
       ),
     );
-  }
-
-  Future<void> _searchFiles(String query) async {
-    try {
-      final results = await _appService.search(query, '');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('找到 ${results.length} 个文件')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('搜索失败: $e')),
-        );
-      }
-    }
   }
 
   Widget _buildStorageOverview() {
@@ -105,15 +94,15 @@ class _HomePageState extends State<HomePage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                _appService.currentServer != null 
-                    ? '${_appService.currentServer!.name} (${_appService.isConnected ? '已连接' : '未连接'})'
-                    : '未选择服务器',
+                _appService.hasActiveServer 
+                    ? _appService.currentServerName
+                    : '未连接服务器',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              if (_appService.isConnected)
+              if (_appService.hasActiveServer)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
@@ -121,7 +110,7 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '在线',
+                    '已选择',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.green[700],
@@ -154,7 +143,7 @@ class _HomePageState extends State<HomePage> {
         label: '视频',
         count: null,
         onTap: () async {
-          if (_appService.currentServer == null) {
+          if (!_appService.hasActiveServer) {
             _showNoServerMessage();
             return;
           }
@@ -163,7 +152,6 @@ class _HomePageState extends State<HomePage> {
             MaterialPageRoute(
               builder: (context) => FileBrowserPage(
                 title: '视频',
-                server: _appService.currentServer,
                 filterType: FileType.video,
               ),
             ),
@@ -176,7 +164,7 @@ class _HomePageState extends State<HomePage> {
         label: '音乐',
         count: null,
         onTap: () async {
-          if (_appService.currentServer == null) {
+          if (!_appService.hasActiveServer) {
             _showNoServerMessage();
             return;
           }
@@ -185,7 +173,6 @@ class _HomePageState extends State<HomePage> {
             MaterialPageRoute(
               builder: (context) => FileBrowserPage(
                 title: '音乐',
-                server: _appService.currentServer,
                 filterType: FileType.audio,
               ),
             ),
@@ -198,7 +185,7 @@ class _HomePageState extends State<HomePage> {
         label: '图片',
         count: null,
         onTap: () async {
-          if (_appService.currentServer == null) {
+          if (!_appService.hasActiveServer) {
             _showNoServerMessage();
             return;
           }
@@ -207,7 +194,6 @@ class _HomePageState extends State<HomePage> {
             MaterialPageRoute(
               builder: (context) => FileBrowserPage(
                 title: '图片',
-                server: _appService.currentServer,
                 filterType: FileType.image,
               ),
             ),
@@ -220,7 +206,7 @@ class _HomePageState extends State<HomePage> {
         label: '文件浏览',
         count: null,
         onTap: () async {
-          if (_appService.currentServer == null) {
+          if (!_appService.hasActiveServer) {
             _showNoServerMessage();
             return;
           }
@@ -229,7 +215,6 @@ class _HomePageState extends State<HomePage> {
             MaterialPageRoute(
               builder: (context) => FileBrowserPage(
                 title: '文件浏览',
-                server: _appService.currentServer,
               ),
             ),
           );
@@ -340,8 +325,7 @@ class _HomePageState extends State<HomePage> {
               ),
             );
             if (mounted && result is ServerRecord) {
-              await _appService.setCurrentServer(result);
-              await _appService.connect();
+              _appService.setCurrentServer(result);
               setState(() {});
             }
           },
@@ -376,8 +360,8 @@ class _HomePageState extends State<HomePage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _appService.currentServer != null 
-                            ? '当前服务器: ${_appService.currentServer!.name}'
+                        _appService.hasActiveServer 
+                            ? '当前服务器: ${_appService.currentServerName}'
                             : '点击添加服务器',
                         style: TextStyle(
                           fontSize: 14,
@@ -429,9 +413,7 @@ class _HomePageState extends State<HomePage> {
             color: Colors.amber,
             title: '收藏',
             subtitle: '快速访问常用文件夹',
-            onTap: () {
-              // 打开收藏页面
-            },
+            onTap: () {},
           ),
           const Divider(height: 32),
           _buildSection(
@@ -439,9 +421,7 @@ class _HomePageState extends State<HomePage> {
             color: Colors.grey,
             title: '最近文件',
             subtitle: '查看最近打开的资源',
-            onTap: () {
-              // 打开最近文件页面
-            },
+            onTap: () {},
           ),
         ],
       ),

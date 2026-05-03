@@ -161,10 +161,9 @@ class _ServerListPageState extends State<ServerListPage> {
                 ),
               ],
             ),
-            onTap: () async {
+            onTap: () {
               // 先设置为当前服务器
-              await _appService.setCurrentServer(server);
-              await _appService.connect();
+              _appService.setCurrentServer(server);
               
               if (mounted) {
                 // 返回服务器给上一页

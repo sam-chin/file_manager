@@ -5,13 +5,11 @@ import '../services/app_service.dart';
 
 class FileBrowserPage extends StatefulWidget {
   final String title;
-  final ServerRecord? server;
   final FileType? filterType;
 
   const FileBrowserPage({
     super.key,
     required this.title,
-    this.server,
     this.filterType,
   });
 
@@ -24,39 +22,12 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   
   List<FileItem> _files = [];
   bool _isLoading = false;
-  bool _isConnected = false;
-  String _currentPath = "";
-
-  bool get _isRemoteMode => widget.server != null;
+  String _currentPath = '';
 
   @override
   void initState() {
     super.initState();
-    if (_isRemoteMode) {
-      _connectAndLoad();
-    }
-  }
-
-  Future<void> _connectAndLoad() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    if (widget.server != null) {
-      await _appService.setCurrentServer(widget.server);
-      final connected = await _appService.connect();
-
-      if (connected) {
-        setState(() {
-          _isConnected = true;
-        });
-        await _loadFiles(_currentPath);
-      }
-    }
-
-    setState(() {
-      _isLoading = false;
-    });
+    _loadFiles(_currentPath);
   }
 
   Future<void> _loadFiles(String path) async {
@@ -75,8 +46,8 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
           path: _getParentPath(path),
           size: 0,
           modifiedTime: DateTime.now(),
-          isDirectory: true,
           type: FileType.folder,
+          isDirectory: true,
         ));
       }
       
@@ -107,12 +78,6 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   @override
-  void dispose() {
-    // AppService 是全局单例，不需要在这里断开
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -120,18 +85,30 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _isRemoteMode && !_isConnected
+          : !_appService.hasActiveServer
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.error, size: 64, color: Colors.red),
+                      Icon(
+                        Icons.error,
+                        size: 80,
+                        color: Colors.grey[400],
+                      ),
                       const SizedBox(height: 16),
-                      const Text('连接失败'),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _connectAndLoad,
-                        child: const Text('重试'),
+                      Text(
+                        '未选择服务器',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '请先在首页选择服务器',
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                        ),
                       ),
                     ],
                   ),
@@ -207,7 +184,7 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       final newPath = _currentPath.isEmpty ? file.name : '$_currentPath/${file.name}';
       _loadFiles(newPath);
     } else if (file.type == FileType.video) {
-      // 统一调用中控台进行播放
+      // 统一调用 AppService 准备播放
       try {
         final proxyUrl = await _appService.preparePlayback(file);
         if (mounted) {

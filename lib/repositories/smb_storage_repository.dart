@@ -6,6 +6,7 @@ import 'storage_repository.dart';
 class SmbStorageRepository implements StorageRepository {
   final SmbService _smbService;
   final ServerRecord _server;
+  bool _isConnected = false;
   
   SmbStorageRepository({
     required SmbService smbService,
@@ -14,34 +15,24 @@ class SmbStorageRepository implements StorageRepository {
        _server = server;
 
   @override
-  bool get isConnected => _smbService.isConnected;
+  bool get isConnected => _isConnected;
 
   @override
   Future<bool> connect() async {
-    return await _smbService.connect(
-      host: _server.host,
-      share: _server.share ?? "",
-      domain: _server.domain,
-      username: _server.username,
-      password: _server.encryptedPassword,
-    );
+    // 简化连接逻辑，不实际建立长连接，只是标记
+    _isConnected = true;
+    return true;
   }
 
   @override
   Future<void> disconnect() async {
-    await _smbService.disconnect();
+    _isConnected = false;
   }
 
   @override
   Future<List<FileItem>> getFiles(String path) async {
-    if (!isConnected) {
-      final success = await connect();
-      if (!success) {
-        throw Exception("Failed to connect to SMB server");
-      }
-    }
-    
-    return await _smbService.listFiles(path);
+    // 每次调用时直接通过 server 和 path 来获取
+    return await _smbService.listFiles(_server, path);
   }
 
   @override
