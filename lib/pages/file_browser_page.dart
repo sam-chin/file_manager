@@ -74,6 +74,13 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     );
   }
 
+  List<FileItem> _getAllFilesAsPlaylist() {
+    return files
+        .where((entity) => entity is File)
+        .map((entity) => _entityToFileItem(entity))
+        .toList();
+  }
+
   IconData _getIcon(FileSystemEntity entity) {
     if (entity is Directory) return Icons.folder;
     final name = entity.path.toLowerCase();
@@ -101,9 +108,13 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                 final entity = files[index];
                 final isDir = entity is Directory;
                 final name = entity.path.split('/').last;
+                final fileItem = _entityToFileItem(entity);
                 return GestureDetector(
                   onDoubleTap: isDir ? null : () {
-                    MediaService().openFile(_entityToFileItem(entity));
+                    final playlist = _getAllFilesAsPlaylist();
+                    if (playlist.isNotEmpty) {
+                      MediaService().open(fileItem, playlist);
+                    }
                   },
                   child: ListTile(
                     leading: Icon(

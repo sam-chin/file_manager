@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import '../models/file_item.dart';
@@ -11,82 +10,170 @@ class MediaService extends ChangeNotifier {
   factory MediaService() => _instance;
   MediaService._internal();
 
-  final Player _audioPlayer = Player();
+  final Player _player = Player();
   
-  FileItem? currentFile;
-  MediaCategory currentCategory = MediaCategory.none;
+  Player get player => _player;
+  
+  List<FileItem> playlist = [];
+  int currentIndex = 0;
+  MediaCategory category = MediaCategory.none;
   bool isPlaying = false;
-  Uint8List? cachedBytes;
+  double progress = 0.0;
 
-  final Set<String> _imgExts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'};
-  final Set<String> _audExts = {'.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac'};
-  final Set<String> _vidExts = {'.mp4', '.mkv', '.mov', '.avi', '.flv', '.wmv', '.webm'};
+  FileItem? get currentFile {
+    if (playlist.isEmpty || currentIndex >= playlist.length) return null;
+    return playlist[currentIndex];
+  }
 
-  String? get currentPath => currentFile?.path;
   String get currentName => currentFile?.name ?? '';
+  bool get hasNext => currentIndex < playlist.length - 1;
+  bool get hasPrevious => currentIndex > 0;
 
-  MediaCategory detectCategory(String path) {
-    final lower = path.toLowerCase();
-    if (_imgExts.any((ext) => lower.endsWith(ext))) return MediaCategory.image;
-    if (_audExts.any((ext) => lower.endsWith(ext))) return MediaCategory.audio;
-    if (_vidExts.any((ext) => lower.endsWith(ext))) return MediaCategory.video;
-    return MediaCategory.none;
+  Duration get playerDuration => _player.state.duration;
+  Duration get playerPosition {
+    final duration = _player.state.duration.inMilliseconds;
+    return Duration(milliseconds: (duration * progress).toInt());
   }
 
-  void openFile(FileItem file) {
-    currentFile = file;
-    currentCategory = detectCategory(file.path);
-    isPlaying = false;
-    cachedBytes = null;
+  // 更新：接收当前文件和整个目录的文件列表
+  void open(FileItem file, List<FileItem> allFiles) {
+    // 过滤出支持的媒体格式
+    playlist = allFiles.where((f) => _isMedia(f.path)).toList();
+    currentIndex = playlist.indexWhere((f) => f.path == file.path);
+    if (currentIndex < 0) {
+      playlist = [file];
+      currentIndex = 0;
+    }
+    
+    _updateCategory();
+    _startPlaying();
+    _setupListeners();
     notifyListeners();
+  }
 
-    if (currentCategory == MediaCategory.audio) {
-      _playAudio(file.path);
+  void _updateCategory() {
+    if (currentFile == null) {
+      category = MediaCategory.none;
+      return;
+    }
+    String path = currentFile!.path.toLowerCase();
+    if (path.endsWith('.mp4') || path.endsWith('.mkv') || path.endsWith('.mov') || 
+        path.endsWith('.avi') || path.endsWith('.flv') || path.endsWith('.wmv')) {
+      category = MediaCategory.video;
+    } else if (path.endsWith('.mp3') || path.endsWith('.flac') || path.endsWith('.wav') || 
+               path.endsWith('.m4a') || path.endsWith('.aac')) {
+      category = MediaCategory.audio;
+    } else if (path.endsWith('.jpg') || path.endsWith('.png') || path.endsWith('.gif') || 
+               path.endsWith('.webp') || path.endsWith('.bmp')) {
+      category = MediaCategory.image;
+    } else {
+      category = MediaCategory.none;
     }
   }
 
-  Future<void> _playAudio(String path) async {
-    await _audioPlayer.open(Media(path));
-    await _audioPlayer.play();
-    isPlaying = true;
-    notifyListeners();
-  }
-
-  Future<void> play() async {
+  void _startPlaying() {
     if (currentFile == null) return;
-    if (currentCategory == MediaCategory.audio) {
-      await _audioPlayer.play();
+    if (category == MediaCategory.audio || category == MediaCategory.video) {
+      _player.open(Media(currentFile!.path));
+      _player.play();
       isPlaying = true;
-      notifyListeners();
-    }
-  }
-
-  Future<void> pause() async {
-    if (currentCategory == MediaCategory.audio) {
-      await _audioPlayer.pause();
+    } else {
       isPlaying = false;
+    }
+  }
+
+  bool _isMedia(String path) {
+    final p = path.toLowerCase();
+    return p.endsWith('.mp4') || p.endsWith('.mkv') || p.endsWith('.mov') || 
+           p.endsWith('.avi') || p.endsWith('.flv') || p.endsWith('.wmv') ||
+           p.endsWith('.mp3') || p.endsWith('.flac') || p.endsWith('.wav') || 
+           p.endsWith('.m4a') || p.endsWith('.aac') ||
+           p.endsWith('.jpg') || p.endsWith('.png') || p.endsWith('.gif') || 
+           p.endsWith('.webp') || p.endsWith('.bmp');
+  }
+
+  void _setupListeners() {
+    _player.stream.playing.listen((playing) {
+      isPlaying = playing;
+      notifyListeners();
+    });
+    _player.stream.position.listen((position) {
+      final duration = _player.state.duration.inMilliseconds;
+      if (duration > 0) {
+        progress = position.inMilliseconds / duration;
+      }
+      notifyListeners();
+    });
+  }
+
+  void next() {
+    if (hasNext) {
+      currentIndex++;
+      _updateCategory();
+      _startPlaying();
       notifyListeners();
     }
   }
 
-  Future<void> stop() async {
-    if (currentCategory == MediaCategory.audio) {
-      await _audioPlayer.stop();
+  void previous() {
+    if (hasPrevious) {
+      currentIndex--;
+      _updateCategory();
+      _startPlaying();
+      notifyListeners();
     }
-    currentFile = null;
-    currentCategory = MediaCategory.none;
-    isPlaying = false;
-    cachedBytes = null;
+  }
+
+  void togglePlay() {
+    if (isPlaying) {
+      _player.pause();
+      isPlaying = false;
+    } else {
+      _player.play();
+      isPlaying = true;
+    }
     notifyListeners();
+  }
+
+  void seek(double value) {
+    final duration = _player.state.duration;
+    final position = Duration(milliseconds: (duration.inMilliseconds * value).toInt());
+    _player.seek(position);
   }
 
   void close() {
-    stop();
+    _player.stop();
+    category = MediaCategory.none;
+    playlist = [];
+    currentIndex = 0;
+    isPlaying = false;
+    progress = 0.0;
+    notifyListeners();
+  }
+
+  // 兼容旧接口
+  void openFile(FileItem file, {List<FileItem>? folderFiles}) {
+    if (folderFiles != null) {
+      open(file, folderFiles);
+    } else {
+      open(file, [file]);
+    }
+  }
+
+  void openUrl(String url, {String? title, bool isVideo = false}) {
+    final file = FileItem(
+      name: title ?? url.split('/').last,
+      path: url,
+      size: 0,
+      isDirectory: false,
+      type: isVideo ? FileItemType.video : FileItemType.unknown,
+    );
+    open(file, [file]);
   }
 
   @override
   void dispose() {
-    _audioPlayer.dispose();
+    _player.dispose();
     super.dispose();
   }
 }

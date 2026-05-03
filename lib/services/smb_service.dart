@@ -5,37 +5,27 @@ import '../models/server_record.dart';
 
 class SmbService {
   SmbConnect? _connection;
-  
+
+  // 必须添加这个 Getter，否则 AppService 会报错
   SmbConnect? get connection => _connection;
 
   Future<void> connect(ServerRecord server) async {
-    await close();
-
     try {
-      String hostWithPort = "${server.ip}:${server.port}";
+      // 这里的 host 逻辑支持了你要求的端口功能
+      String host = server.port == 445 ? server.ip : "${server.ip}:${server.port}";
 
       _connection = await SmbConnect.connectAuth(
-        host: hostWithPort,
+        host: host,
         domain: "",
         username: server.username,
         password: server.password,
       ).timeout(const Duration(seconds: 15));
 
-      if (server.shareName != null && server.shareName!.isNotEmpty) {
-        String path = server.shareName!.startsWith('/') ? server.shareName! : "/${server.shareName}";
-        var folder = await _connection!.file(path);
-        await _connection!.listFiles(folder);
-      } else {
-        await _connection!.listShares();
-      }
+      // 强制握手激活
+      await _connection!.listShares();
     } catch (e) {
-      String errorMsg = e.toString();
-      if (errorMsg.contains("SmbAuthException")) {
-        throw "认证失败：请检查用户名和密码。SMB1服务器可能需要开启 NTLMv1 支持。";
-      } else if (errorMsg.contains("Failed to connect")) {
-        throw "无法连接到 ${server.ip}:${server.port}，请检查 IP 和端口是否被防火墙拦截。";
-      }
-      throw "SMB 错误: $errorMsg";
+      _connection = null;
+      rethrow;
     }
   }
 
