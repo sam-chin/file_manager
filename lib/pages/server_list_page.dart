@@ -13,6 +13,7 @@ class _ServerListPageState extends State<ServerListPage> {
   void _showAddServerDialog() {
     final nameController = TextEditingController();
     final ipController = TextEditingController();
+    final shareController = TextEditingController(text: "C\$");
     final userController = TextEditingController();
     final passController = TextEditingController();
 
@@ -20,14 +21,17 @@ class _ServerListPageState extends State<ServerListPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("添加 SMB 设备"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameController, decoration: const InputDecoration(labelText: "设备名称")),
-            TextField(controller: ipController, decoration: const InputDecoration(labelText: "IP 地址 (如 192.168.1.5)")),
-            TextField(controller: userController, decoration: const InputDecoration(labelText: "账号")),
-            TextField(controller: passController, decoration: const InputDecoration(labelText: "密码"), obscureText: true),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameController, decoration: const InputDecoration(labelText: "设备名称")),
+              TextField(controller: ipController, decoration: const InputDecoration(labelText: "IP 地址")),
+              TextField(controller: shareController, decoration: const InputDecoration(labelText: "共享文件夹名 (如 C\$, Downloads)")),
+              TextField(controller: userController, decoration: const InputDecoration(labelText: "账号")),
+              TextField(controller: passController, decoration: const InputDecoration(labelText: "密码"), obscureText: true),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("取消")),
@@ -36,12 +40,13 @@ class _ServerListPageState extends State<ServerListPage> {
               final newServer = ServerRecord(
                 name: nameController.text,
                 ip: ipController.text,
+                shareName: shareController.text,
                 username: userController.text,
                 password: passController.text,
               );
               await AppService().db.insertServer(newServer);
               await AppService().init();
-              setState(() {});
+              if (mounted) setState(() {});
               Navigator.pop(context);
             },
             child: const Text("保存"),
@@ -64,7 +69,7 @@ class _ServerListPageState extends State<ServerListPage> {
             itemBuilder: (context, index) => ListTile(
               leading: const Icon(Icons.storage, color: Colors.blue),
               title: Text(servers[index].name),
-              subtitle: Text(servers[index].ip),
+              subtitle: Text("${servers[index].ip} / ${servers[index].shareName}"),
               onTap: () async {
                 try {
                   await AppService().connect(servers[index]);
