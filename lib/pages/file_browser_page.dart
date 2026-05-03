@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:path_provider/path_provider.dart';
+import '../models/file_item.dart';
+import '../services/media_service.dart';
 
 class FileBrowserPage extends StatefulWidget {
   final String? path;
@@ -57,6 +58,37 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
     }
   }
 
+  FileItem _entityToFileItem(FileSystemEntity entity) {
+    final name = entity.path.split('/').last;
+    final isDir = entity is Directory;
+    int size = 0;
+    if (!isDir && entity is File) {
+      size = entity.lengthSync();
+    }
+    return FileItem(
+      name: name,
+      path: entity.path,
+      size: size,
+      isDirectory: isDir,
+      type: isDir ? FileItemType.folder : FileItemType.video,
+    );
+  }
+
+  IconData _getIcon(FileSystemEntity entity) {
+    if (entity is Directory) return Icons.folder;
+    final name = entity.path.toLowerCase();
+    if (name.endsWith('.mp4') || name.endsWith('.mkv') || name.endsWith('.mov')) {
+      return Icons.video_file;
+    }
+    if (name.endsWith('.mp3') || name.endsWith('.flac') || name.endsWith('.wav')) {
+      return Icons.audio_file;
+    }
+    if (name.endsWith('.jpg') || name.endsWith('.png') || name.endsWith('.gif')) {
+      return Icons.image;
+    }
+    return Icons.insert_drive_file;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -69,18 +101,24 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
                 final entity = files[index];
                 final isDir = entity is Directory;
                 final name = entity.path.split('/').last;
-                return ListTile(
-                  leading: Icon(isDir ? Icons.folder : Icons.insert_drive_file, color: isDir ? Colors.amber : Colors.grey),
-                  title: Text(name),
-                  onTap: () {
-                    if (isDir) {
-                      Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => FileBrowserPage(path: entity.path),
-                      ));
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("文件播放功能待实现")));
-                    }
+                return GestureDetector(
+                  onDoubleTap: isDir ? null : () {
+                    MediaService().openFile(_entityToFileItem(entity));
                   },
+                  child: ListTile(
+                    leading: Icon(
+                      _getIcon(entity),
+                      color: isDir ? Colors.amber : Colors.grey,
+                    ),
+                    title: Text(name),
+                    onTap: () {
+                      if (isDir) {
+                        Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => FileBrowserPage(path: entity.path),
+                        ));
+                      }
+                    },
+                  ),
                 );
               },
             ),

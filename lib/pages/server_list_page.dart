@@ -13,6 +13,7 @@ class _ServerListPageState extends State<ServerListPage> {
   void _showServerDialog({ServerRecord? existingServer}) {
     final nameController = TextEditingController(text: existingServer?.name);
     final ipController = TextEditingController(text: existingServer?.ip);
+    final portController = TextEditingController(text: existingServer?.port.toString() ?? "445");
     final userController = TextEditingController(text: existingServer?.username);
     final passController = TextEditingController(text: existingServer?.password);
     final shareController = TextEditingController(text: existingServer?.shareName ?? "");
@@ -20,14 +21,15 @@ class _ServerListPageState extends State<ServerListPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(existingServer == null ? "添加设备" : "修改设备"),
+        title: Text(existingServer == null ? "添加设备" : "修改记录"),
         content: SingleChildScrollView(
           child: Column(
             children: [
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: "名称")),
+              TextField(controller: nameController, decoration: const InputDecoration(labelText: "设备名称")),
               TextField(controller: ipController, decoration: const InputDecoration(labelText: "IP 地址")),
-              TextField(controller: shareController, decoration: const InputDecoration(labelText: "共享名 (可选，留空则访问根目录)")),
-              TextField(controller: userController, decoration: const InputDecoration(labelText: "用户名 (支持中文)")),
+              TextField(controller: portController, decoration: const InputDecoration(labelText: "端口"), keyboardType: TextInputType.number),
+              TextField(controller: shareController, decoration: const InputDecoration(labelText: "共享文件夹 (留空则扫描根目录)")),
+              TextField(controller: userController, decoration: const InputDecoration(labelText: "用户名")),
               TextField(controller: passController, decoration: const InputDecoration(labelText: "密码"), obscureText: true),
             ],
           ),
@@ -43,24 +45,27 @@ class _ServerListPageState extends State<ServerListPage> {
               },
               child: const Text("删除", style: TextStyle(color: Colors.red)),
             ),
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("取消")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("取消"),
+          ),
           ElevatedButton(
             onPressed: () async {
               final server = ServerRecord(
                 id: existingServer?.id,
                 name: nameController.text,
                 ip: ipController.text,
+                port: int.tryParse(portController.text) ?? 445,
                 username: userController.text,
                 password: passController.text,
                 shareName: shareController.text.isEmpty ? null : shareController.text,
               );
-
+              
               if (existingServer == null) {
                 await AppService().db.insertServer(server);
               } else {
                 await AppService().db.updateServer(server);
               }
-              
               await AppService().init();
               if (mounted) setState(() {});
               if (mounted) Navigator.pop(context);
@@ -86,8 +91,8 @@ class _ServerListPageState extends State<ServerListPage> {
               leading: const Icon(Icons.storage, color: Colors.blue),
               title: Text(servers[index].name),
               subtitle: Text(servers[index].shareName == null || servers[index].shareName!.isEmpty
-                  ? servers[index].ip
-                  : "${servers[index].ip} / ${servers[index].shareName}"),
+                  ? "${servers[index].ip}:${servers[index].port}"
+                  : "${servers[index].ip}:${servers[index].port} / ${servers[index].shareName}"),
               onTap: () async {
                 try {
                   await AppService().connect(servers[index]);

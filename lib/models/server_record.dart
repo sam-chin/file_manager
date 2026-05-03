@@ -6,6 +6,7 @@ class ServerRecord {
   String password;
   String? shareName;
   final String type;
+  final int port;
 
   ServerRecord({
     this.id,
@@ -15,6 +16,7 @@ class ServerRecord {
     required this.password,
     this.shareName,
     this.type = 'SMB',
+    this.port = 445,
   });
 
   Map<String, dynamic> toMap() {
@@ -26,6 +28,7 @@ class ServerRecord {
       'password': password,
       'shareName': shareName ?? "",
       'type': type,
+      'port': port,
     };
   }
 
@@ -38,6 +41,7 @@ class ServerRecord {
       password: map['password'],
       shareName: map['shareName'],
       type: map['type'] ?? 'SMB',
+      port: map['port'] != null ? int.tryParse(map['port'].toString()) ?? 445 : 445,
     );
   }
 }

@@ -4,36 +4,50 @@ import '../models/file_item.dart';
 import '../models/server_record.dart';
 
 class SmbService {
-  SmbConnect? connection;
+  SmbConnect? _connection;
 
   Future<void> connect(ServerRecord server) async {
+    await close();
+
     try {
-      connection = await SmbConnect.connectAuth(
-        host: server.ip,
+      String hostWithPort = "${server.ip}:${server.port}";
+
+      _connection = await SmbConnect.connectAuth(
+        host: hostWithPort,
         domain: "",
         username: server.username,
         password: server.password,
       ).timeout(const Duration(seconds: 15));
 
       if (server.shareName != null && server.shareName!.isNotEmpty) {
-        var folder = await connection!.file(server.shareName!);
-        await connection!.listFiles(folder);
+        String path = server.shareName!.startsWith('/') ? server.shareName! : "/${server.shareName}";
+        var folder = await _connection!.file(path);
+        await _connection!.listFiles(folder);
+      } else {
+        await _connection!.listShares();
       }
     } catch (e) {
       String errorMsg = e.toString();
       if (errorMsg.contains("SmbAuthException")) {
-        throw "登录失败：请检查用户名（支持中文）和密码是否正确。";
-      } else if (errorMsg.contains("Connection refused")) {
-        throw "无法连接：服务器可能未开启 SMB 服务或 IP 错误。";
+        throw "认证失败：请检查用户名和密码。SMB1服务器可能需要开启 NTLMv1 支持。";
+      } else if (errorMsg.contains("Failed to connect")) {
+        throw "无法连接到 ${server.ip}:${server.port}，请检查 IP 和端口是否被防火墙拦截。";
       }
-      throw "错误: $errorMsg";
+      throw "SMB 错误: $errorMsg";
     }
   }
 
+  Future<void> close() async {
+    try {
+      await _connection?.close();
+      _connection = null;
+    } catch (_) {}
+  }
+
   Future<List<FileItem>> list(String path) async {
-    if (connection == null) return [];
-    var folder = await connection!.file(path);
-    var files = await connection!.listFiles(folder);
+    if (_connection == null) return [];
+    var folder = await _connection!.file(path);
+    var files = await _connection!.listFiles(folder);
     
     return files.map((f) {
       final bool isDir = f.isDirectory();
@@ -48,8 +62,8 @@ class SmbService {
   }
 
   Future<void> delete(String path) async {
-    if (connection == null) return;
-    var f = await connection!.file(path);
-    await connection!.delete(f);
+    if (_connection == null) return;
+    var f = await _connection!.file(path);
+    await _connection!.delete(f);
   }
 }

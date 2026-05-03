@@ -19,7 +19,7 @@ class DBHelper {
     String path = join(await getDatabasesPath(), 'media_manager.db');
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE servers (
@@ -29,9 +29,15 @@ class DBHelper {
             username TEXT,
             password TEXT,
             shareName TEXT,
-            type TEXT
+            type TEXT,
+            port INTEGER DEFAULT 445
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE servers ADD COLUMN port INTEGER DEFAULT 445');
+        }
       },
     );
   }
