@@ -1,76 +1,44 @@
-// lib/services/app_service.dart
-import '../models/server_record.dart';
-import '../models/file_item.dart';
+import 'package:flutter/material.dart';
 import 'smb_service.dart';
-import 'ftp_service.dart';
-import 'dlna_service.dart';
-import 'stream_proxy_server.dart';
+import 'db_helper.dart';
+import 'proxy_server.dart';
+import '../models/file_item.dart';
+import '../models/server_record.dart';
+import '../pages/player_page.dart';
 
 class AppService {
   static final AppService _instance = AppService._internal();
   factory AppService() => _instance;
   AppService._internal();
 
-  final SmbService _smbService = SmbService();
-  final FtpService _ftpService = FtpService();
-  final DlnaService _dlnaService = DlnaService();
-  final StreamProxyServer _proxyServer = StreamProxyServer();
+  final SmbService smb = SmbService();
+  final DBHelper db = DBHelper();
+  List<ServerRecord> savedServers = [];
 
-  ServerRecord? _activeServer;
-
-  // ── 服务器管理 ────────────────────────────────────────────
-
-  void setCurrentServer(ServerRecord server) {
-    _activeServer = server;
+  Future<void> init() async {
+    savedServers = await db.getServers();
   }
 
-  ServerRecord? get currentServer => _activeServer;
-  String get currentServerName => _activeServer?.name ?? '未连接';
-  bool get hasActiveServer => _activeServer != null;
+  // 全局播放方法：任何页面调用此方法即可
+  Future<void> playMedia(BuildContext context, FileItem item) async {
+    if (smb.connection == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("请先连接服务器")));
+      return;
+    }
+    
+    // 启动代理并获取流地址
+    final baseUrl = await ProxyServer().start(smb.connection!);
+    final streamUrl = "$baseUrl/stream?path=${Uri.encodeComponent(item.path)}";
 
-  // ── 文件浏览 ──────────────────────────────────────────────
-
-  Future<List<FileItem>> browse(String path) async {
-    if (_activeServer == null) throw Exception('未选中服务器');
-
-    switch (_activeServer!.type) {
-      case ServerType.smb:
-        return await _smbService.listFiles(_activeServer!, path);
-      case ServerType.ftp:
-        return await _ftpService.listFiles(_activeServer!, path);
+    if (context.mounted) {
+      Navigator.push(context, MaterialPageRoute(
+        builder: (_) => PlayerPage(url: streamUrl, title: item.name),
+      ));
     }
   }
 
-  // ── 播放准备 ──────────────────────────────────────────────
-
-  Future<String> preparePlayback(FileItem item) async {
-    if (item.isDirectory) throw Exception('无法播放文件夹');
-
-    if (_activeServer?.type == ServerType.smb) {
-      return await _proxyServer.startProxy(item, _activeServer!);
-    }
-    return item.path;
+  // 辅助：连接并更新状态
+  Future<void> connect(ServerRecord server) async {
+    await smb.connect(server.ip, server.username, server.password);
   }
-
-  // ── DLNA 投屏 ─────────────────────────────────────────────
-
-  Future<void> startDlnaSearch({
-    void Function(List<dynamic> devices)? onDevicesChanged,
-  }) async {
-    await _dlnaService.startSearch(onDevicesChanged: onDevicesChanged);
-  }
-
-  Future<void> stopDlnaSearch() async {
-    await _dlnaService.stopSearch();
-  }
-
-  List<dynamic> get dlnaDevices => _dlnaService.devices;
-
-  Future<void> castToDevice(FileItem item, dynamic device) async {
-    final playUrl = await preparePlayback(item);
-    await _dlnaService.cast(device, playUrl, item.name);
-  }
-
-  Future<void> pauseDlna(dynamic device) => _dlnaService.pause(device);
-  Future<void> stopDlna(dynamic device) => _dlnaService.stop(device);
 }

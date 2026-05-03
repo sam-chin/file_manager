@@ -1,57 +1,34 @@
-// lib/services/dlna_service.dart
-// 使用 dlna_dart 0.0.8 的正确 API
-// 注意：setRefershCallback 是原包的拼写（不是 setRefreshCallback）
-
-import 'package:dlna_dart/dlna_dart.dart';
+import 'dart:async';
+import 'package:dlna_dart/dlna.dart';
 
 class DlnaService {
-  final DLNAManager _manager = DLNAManager();
-  final List<dynamic> _devices = [];
+  final DLNAManager _searcher = DLNAManager();
+  StreamSubscription? _subscription;
+  
+  // 存储发现的设备映射 <ID, 设备对象>
+  Map<String, DLNADevice> devices = {};
 
-  List<dynamic> get devices => List.unmodifiable(_devices);
-
-  Future<void> startSearch({
-    void Function(List<dynamic> devices)? onDevicesChanged,
-  }) async {
-    _devices.clear();
-
-    // 0.0.8 API: setRefershCallback（原包拼写错误，保留）
-    _manager.setRefershCallback((deviceList) {
-      _devices.clear();
-      _devices.addAll(deviceList);
-      onDevicesChanged?.call(List.unmodifiable(_devices));
+  Future<void> startSearch() async {
+    // 对应示例：searcher.start()
+    final manager = await _searcher.start(reusePort: true);
+    
+    // 对应示例：m.devices.stream.listen
+    _subscription?.cancel();
+    _subscription = manager.devices.stream.listen((deviceMap) {
+      devices = deviceMap;
+      devices.forEach((key, value) {
+        print("发现设备: ${value.info.friendlyName}");
+      });
     });
-
-    _manager.startSearch();
   }
 
-  Future<void> stopSearch() async {
-    _manager.stop();
-    _devices.clear();
+  Future<void> cast(DLNADevice device, String url, String title) async {
+    // 0.0.8 投屏通常使用 play 方法
+    await device.play(url, title: title);
   }
 
-  // device 为 dynamic，因为 0.0.8 不导出具体类型
-  Future<void> cast(dynamic device, String url, String title) async {
-    try {
-      await device.play(url, title: title);
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<void> pause(dynamic device) async {
-    try {
-      await device.pause();
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<void> stop(dynamic device) async {
-    try {
-      await device.stop();
-    } catch (e) {
-      rethrow;
-    }
+  void stop() {
+    _subscription?.cancel();
+    _searcher.stop();
   }
 }

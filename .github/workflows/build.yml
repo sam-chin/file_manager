@@ -1,47 +1,22 @@
-name: Build APK
-
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      # Flutter 3.27.4 = Dart 3.6.2，与所有依赖包兼容
-      - name: Set up Flutter
+      
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.4'
-          cache: true
+          flutter-version: '3.19.0' # 必须与你要求的版本一致
+          channel: 'stable'
 
-      - name: Install dependencies
-        run: flutter pub get
-
-      # media_kit_libs_android_video 需要 SDK 35
-      - name: Install Android SDK 35
+      - name: Install Dependencies
         run: |
-          SDKMANAGER=$(find $ANDROID_HOME/cmdline-tools -name "sdkmanager" 2>/dev/null | head -1)
-          echo "y" | $SDKMANAGER "platforms;android-35" "build-tools;35.0.0"
+          # 关键步骤：强制清理缓存，防止老包下载残缺
+          flutter pub cache clean -f
+          flutter pub get
+          # 预下载 Android 架构文件
+          flutter precache --android
 
       - name: Build APK
-        run: flutter build apk --release --no-tree-shake-icons
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk-${{ github.run_number }}
-          path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 30
+        run: flutter build apk --release

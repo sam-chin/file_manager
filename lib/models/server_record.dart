@@ -1,62 +1,45 @@
-// lib/models/server_record.dart
-// 纯 Dart 类，去掉所有 isar 注解，改用 sqflite Map 序列化
-
-enum ServerType { smb, ftp }
-
 class ServerRecord {
-  int? id;
-  ServerType type;
-  String name;
-  String host;
-  int port;
-  String? share;
-  String? domain;
-  String? username;
-  String? encryptedPassword;
-  DateTime createdAt;
-  DateTime? lastConnected;
+  final int? id;
+  final String name;
+  final String ip;
+  final String username;
+  final String password;
+  final String shareName;
+  final String type; // SMB 或其他
 
   ServerRecord({
     this.id,
-    required this.type,
     required this.name,
-    required this.host,
-    this.port = 0,
-    this.share,
-    this.domain,
-    this.username,
-    this.encryptedPassword,
-    DateTime? createdAt,
-    this.lastConnected,
-  }) : createdAt = createdAt ?? DateTime.now();
+    required this.ip,
+    required this.username,
+    required this.password,
+    required this.shareName,
+    this.type = 'SMB',
+  });
 
-  Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'type': type.index,
-        'name': name,
-        'host': host,
-        'port': port,
-        'share': share,
-        'domain': domain,
-        'username': username,
-        'encrypted_password': encryptedPassword,
-        'created_at': createdAt.millisecondsSinceEpoch,
-        'last_connected': lastConnected?.millisecondsSinceEpoch,
-      };
+  // 转换为数据库格式
+  Map<String, dynamic> toMap() {
+    return {
+      if (id != null) 'id': id,
+      'name': name,
+      'ip': ip,
+      'username': username,
+      'password': password,
+      'shareName': shareName,
+      'type': type,
+    };
+  }
 
-  factory ServerRecord.fromMap(Map<String, dynamic> map) => ServerRecord(
-        id: map['id'] as int?,
-        type: ServerType.values[map['type'] as int],
-        name: map['name'] as String,
-        host: map['host'] as String,
-        port: (map['port'] as int?) ?? 0,
-        share: map['share'] as String?,
-        domain: map['domain'] as String?,
-        username: map['username'] as String?,
-        encryptedPassword: map['encrypted_password'] as String?,
-        createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
-        lastConnected: map['last_connected'] != null
-            ? DateTime.fromMillisecondsSinceEpoch(map['last_connected'] as int)
-            : null,
-      );
+  // 从数据库格式转换回模型
+  factory ServerRecord.fromMap(Map<String, dynamic> map) {
+    return ServerRecord(
+      id: map['id'],
+      name: map['name'],
+      ip: map['ip'],
+      username: map['username'],
+      password: map['password'],
+      shareName: map['shareName'],
+      type: map['type'],
+    );
+  }
 }

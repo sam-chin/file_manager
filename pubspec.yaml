@@ -1,46 +1,63 @@
 name: media_file_manager
-description: "A professional media file manager with SMB, FTP, and DLNA support."
-publish_to: 'none'
+description: "A professional media manager with SMB 0.0.9 and DLNA 0.0.8 support."
+publish_to: 'none' # 防止意外上传到 pub.dev
 
+# 版本号，根据你的 App 发布计划调整
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.6.0 <4.0.0'
+  # Flutter 3.19.0 对应的 SDK 范围
+  sdk: '>=3.2.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
+  cupertino_icons: ^1.0.6
 
-  # SMB — 纯 Dart，无 native 依赖
-  # 正确 API: SmbConnect.connectAuth() + connect.listFiles()
+  # --- SMB 存储 (严格锁定你提供的 0.0.9 示例版本) ---
   smb_connect: 0.0.9
 
-  # DLNA — 锁定 0.0.8，0.1.0 需要 Dart 3.8.0 与 Flutter 3.27.4 不兼容
-  # API: DLNAManager() + setRefershCallback + startSearch
+  # --- DLNA 投屏 (严格锁定你提供的 0.0.8 示例版本) ---
   dlna_dart: 0.0.8
 
-  # FTP
-  ftpconnect: ^2.0.3
+  # --- 视频播放核心 (media_kit 方案) ---
+  media_kit: ^1.1.10
+  media_kit_video: ^1.1.4
+  media_kit_libs_video: ^1.0.4
 
-  # 媒体播放 — 必须在 main() 调用 MediaKit.ensureInitialized()
-  media_kit: ^1.1.11
-  media_kit_video: ^1.2.5
-  media_kit_libs_android_video: ^1.3.2
+  # --- HTTP 代理服务器 (用于将 SMB 流转为视频播放器可读的 URL) ---
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
 
-  # 数据库 — sqflite 替代 isar，彻底消灭 lStar 构建 bug
-  sqflite: ^2.3.3
-  path: ^1.9.0
-
-  path_provider: ^2.1.4
-  permission_handler: ^11.3.1
-  http: ^1.2.2
-  equatable: ^2.0.5
-  flutter_bloc: ^8.1.6
+  # --- 状态管理与功能增强 ---
+  provider: ^6.1.1
+  path_provider: ^2.1.2
+  shared_preferences: ^2.2.2
+  path: ^1.8.3
+  sqflite: ^2.3.0
+  path: ^1.8.3
+# 解决老旧插件带来的版本冲突
+# 特别是 dlna_dart 可能依赖了较旧的 xml 或 collection 包
+dependency_overrides:
+  xml: ^6.3.0
+  collection: ^1.18.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  # 代码规范检查
+  flutter_lints: ^3.0.0
 
 flutter:
   uses-material-design: true
+
+  # 如果你有自定义图标或图片资源，在此处声明
+  # assets:
+  #   - assets/images/
+  #   - assets/icons/
+
+  # 字体配置示例
+  # fonts:
+  #   - family: MyFont
+  #     fonts:
+  #       - asset: fonts/MyFont-Regular.ttf

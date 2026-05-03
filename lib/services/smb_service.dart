@@ -1,73 +1,60 @@
-// lib/services/smb_service.dart
-// 使用 smb_connect 0.0.9 正确 API
-
+import 'dart:async';
 import 'package:smb_connect/smb_connect.dart';
 import '../models/file_item.dart';
-import '../models/server_record.dart';
 
 class SmbService {
-  Future<List<FileItem>> listFiles(ServerRecord server, String path) async {
-    SmbConnect? connect;
-    try {
-      connect = await SmbConnect.connectAuth(
-        host: server.host,
-        domain: server.domain ?? '',
-        username: server.username ?? '',
-        password: server.encryptedPassword ?? '',
+  SmbConnect? _connection;
+
+  Future<void> connect(String ip, String user, String pass) async {
+    await disconnect();
+    _connection = await SmbConnect.connectAuth(
+      host: ip,
+      domain: "",
+      username: user,
+      password: pass,
+    );
+  }
+
+  Future<List<FileItem>> getList(String path) async {
+    if (_connection == null) throw "SMB 未连接";
+    
+    SmbFile folder = await _connection!.file(path);
+    List<SmbFile> files = await _connection!.listFiles(folder);
+    
+    return files.map((f) {
+      final bool isDir = f.isDirectory();
+      return FileItem(
+        name: f.path.split('/').last.isEmpty ? f.path : f.path.split('/').last,
+        path: f.path,
+        size: f.fileSize,
+        isDirectory: isDir,
+        type: isDir ? FileItemType.folder : _inferType(f.path),
       );
-
-      final folderPath = path.isEmpty ? '/' : path;
-      final folder = await connect.file(folderPath);
-      final items = await connect.listFiles(folder);
-
-      final result = items.map((smbFile) {
-        final isDir = smbFile.isDirectory();
-        final name = _fileName(smbFile.path);
-        return FileItem(
-          name: name,
-          path: smbFile.path,
-          size: smbFile.contentLength ?? 0,
-          modifiedTime: smbFile.lastModified != null
-              ? DateTime.fromMillisecondsSinceEpoch(smbFile.lastModified!)
-              : DateTime.now(),
-          type: isDir ? FileType.folder : _inferType(name),
-          isDirectory: isDir,
-        );
-      }).toList();
-
-      result.sort((a, b) {
-        if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
-        return a.name.compareTo(b.name);
-      });
-
-      return result;
-    } catch (e) {
-      rethrow;
-    } finally {
-      await connect?.close();
-    }
+    }).toList();
   }
 
-  String _fileName(String path) {
-    final trimmed =
-        path.endsWith('/') ? path.substring(0, path.length - 1) : path;
-    final idx = trimmed.lastIndexOf('/');
-    return idx == -1 ? trimmed : trimmed.substring(idx + 1);
+  // 补全管理功能
+  Future<void> mkdir(String path) async => await _connection?.createFolder(path);
+  Future<void> delete(String path) async {
+    if (_connection == null) return;
+    final f = await _connection!.file(path);
+    await _connection!.delete(f);
+  }
+  Future<void> rename(String oldPath, String newPath) async {
+    if (_connection == null) return;
+    final oldF = await _connection!.file(oldPath);
+    await _connection!.rename(oldF, newPath);
   }
 
-  FileType _inferType(String name) {
-    final ext = name.contains('.')
-        ? name.substring(name.lastIndexOf('.') + 1).toLowerCase()
-        : '';
-    if (['mp4', 'mkv', 'mov', 'avi', 'webm', 'm4v', 'iso'].contains(ext)) {
-      return FileType.video;
-    }
-    if (['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg'].contains(ext)) {
-      return FileType.audio;
-    }
-    if (['jpg', 'jpeg', 'png', 'heic', 'webp', 'gif', 'bmp'].contains(ext)) {
-      return FileType.image;
-    }
-    return FileType.unknown;
+  Future<void> disconnect() async {
+    await _connection?.close();
+    _connection = null;
+  }
+
+  FileItemType _inferType(String path) {
+    final p = path.toLowerCase();
+    if (p.endsWith(".mp4") || p.endsWith(".mkv")) return FileItemType.video;
+    if (p.endsWith(".mp3")) return FileItemType.audio;
+    return FileItemType.other;
   }
 }
