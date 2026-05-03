@@ -23,7 +23,7 @@ class SmbService {
       path: f.path,
       size: f.size,
       isDirectory: f.isDirectory(),
-      type: f.isDirectory() ? FileItemType.folder : _getType(f.path)
+      type: f.isDirectory() ? FileItemType.folder : FileItemType.video
     )).toList();
   }
 
@@ -32,6 +32,4 @@ class SmbService {
     var f = await connection!.file(path);
     await connection!.delete(f);
   }
-
-  FileItemType _getType(String p) => p.toLowerCase().endsWith(".mp4") ? FileItemType.video : FileItemType.other;
 }
