@@ -1,60 +1,37 @@
-import 'dart:async';
 import 'package:smb_connect/smb_connect.dart';
 import '../models/file_item.dart';
 
 class SmbService {
-  SmbConnect? _connection;
+  SmbConnect? connection;
 
-  Future<void> connect(String ip, String user, String pass) async {
-    await disconnect();
-    _connection = await SmbConnect.connectAuth(
-      host: ip,
+  Future<void> connect(String host, String user, String pass) async {
+    connection = await SmbConnect.connectAuth(
+      host: host,
       domain: "",
       username: user,
-      password: pass,
+      password: pass
     );
   }
 
-  Future<List<FileItem>> getList(String path) async {
-    if (_connection == null) throw "SMB 未连接";
+  Future<List<FileItem>> list(String path) async {
+    if (connection == null) return [];
+    var folder = await connection!.file(path);
+    var files = await connection!.listFiles(folder);
     
-    SmbFile folder = await _connection!.file(path);
-    List<SmbFile> files = await _connection!.listFiles(folder);
-    
-    return files.map((f) {
-      final bool isDir = f.isDirectory();
-      return FileItem(
-        name: f.path.split('/').last.isEmpty ? f.path : f.path.split('/').last,
-        path: f.path,
-        size: f.fileSize,
-        isDirectory: isDir,
-        type: isDir ? FileItemType.folder : _inferType(f.path),
-      );
-    }).toList();
+    return files.map((f) => FileItem(
+      name: f.path.split('/').last.isEmpty ? f.path : f.path.split('/').last,
+      path: f.path,
+      size: f.size,
+      isDirectory: f.isDirectory(),
+      type: f.isDirectory() ? FileItemType.folder : _getType(f.path)
+    )).toList();
   }
 
-  // 补全管理功能
-  Future<void> mkdir(String path) async => await _connection?.createFolder(path);
   Future<void> delete(String path) async {
-    if (_connection == null) return;
-    final f = await _connection!.file(path);
-    await _connection!.delete(f);
-  }
-  Future<void> rename(String oldPath, String newPath) async {
-    if (_connection == null) return;
-    final oldF = await _connection!.file(oldPath);
-    await _connection!.rename(oldF, newPath);
+    if (connection == null) return;
+    var f = await connection!.file(path);
+    await connection!.delete(f);
   }
 
-  Future<void> disconnect() async {
-    await _connection?.close();
-    _connection = null;
-  }
-
-  FileItemType _inferType(String path) {
-    final p = path.toLowerCase();
-    if (p.endsWith(".mp4") || p.endsWith(".mkv")) return FileItemType.video;
-    if (p.endsWith(".mp3")) return FileItemType.audio;
-    return FileItemType.other;
-  }
+  FileItemType _getType(String p) => p.toLowerCase().endsWith(".mp4") ? FileItemType.video : FileItemType.other;
 }

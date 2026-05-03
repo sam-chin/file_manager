@@ -19,14 +19,16 @@ class AppService {
     savedServers = await db.getServers();
   }
 
-  // 全局播放方法：任何页面调用此方法即可
+  Future<List<FileItem>> browse(String path) => smb.list(path);
+
+  Future<void> deleteItem(FileItem item) => smb.delete(item.path);
+
   Future<void> playMedia(BuildContext context, FileItem item) async {
     if (smb.connection == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("请先连接服务器")));
       return;
     }
     
-    // 启动代理并获取流地址
     final baseUrl = await ProxyServer().start(smb.connection!);
     final streamUrl = "$baseUrl/stream?path=${Uri.encodeComponent(item.path)}";
 
@@ -37,7 +39,6 @@ class AppService {
     }
   }
 
-  // 辅助：连接并更新状态
   Future<void> connect(ServerRecord server) async {
     await smb.connect(server.ip, server.username, server.password);
   }

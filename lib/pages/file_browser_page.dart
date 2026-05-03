@@ -26,9 +26,13 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
       final data = await AppService().browse(widget.currentPath);
       setState(() => _items = data);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("加载失败: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("加载失败: $e")));
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -77,7 +81,6 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
             title: const Text("重命名"),
             onTap: () {
               Navigator.pop(context);
-              // 调用 AppService().renameItem(...)
             },
           ),
           ListTile(
@@ -95,11 +98,9 @@ class _FileBrowserPageState extends State<FileBrowserPage> {
   }
 
   void _playVideo(FileItem item) async {
-    // 1. 获取代理 URL
-    // 2. 跳转到播放器页面
+    await AppService().playMedia(context, item);
   }
 
   void _createNewFolder() {
-    // 弹出对话框输入名字，调用 AppService().createFolder(name)
   }
 }
