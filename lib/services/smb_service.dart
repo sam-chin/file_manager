@@ -6,26 +6,84 @@ import '../models/server_record.dart';
 class SmbService {
   SmbConnect? _connection;
 
-  // 必须添加这个 Getter，否则 AppService 会报错
   SmbConnect? get connection => _connection;
+
+  List<String> hiddenPaths = [];
 
   Future<void> connect(ServerRecord server) async {
     try {
-      // 这里的 host 逻辑支持了你要求的端口功能
-      String host = server.port == 445 ? server.ip : "${server.ip}:${server.port}";
+      String host = "${server.ip}:${server.port}";
 
       _connection = await SmbConnect.connectAuth(
         host: host,
-        domain: "",
-        username: server.username,
+        domain: "WORKGROUP",
+        username: server.username.trim(),
         password: server.password,
       ).timeout(const Duration(seconds: 15));
 
-      // 强制握手激活
       await _connection!.listShares();
     } catch (e) {
       _connection = null;
       rethrow;
+    }
+  }
+
+  Future<List<FileItem>> list(String path) async {
+    if (_connection == null) return [];
+
+    try {
+      var folder = await _connection!.file(path);
+      var files = await _connection!.listFiles(folder);
+
+      return files.map((f) {
+        final bool isDir = f.isDirectory();
+        final String fileName = _extractFileName(f.path);
+
+        return FileItem(
+          name: fileName,
+          path: f.path,
+          size: f.size,
+          isDirectory: isDir,
+          type: isDir ? FileItemType.folder : _determineType(fileName),
+        );
+      }).toList();
+    } catch (e) {
+      print("SMB2 读取列表失败: $e");
+      return [];
+    }
+  }
+
+  Future<List<FileItem>> listFoldersByMedia(String path, FileItemType targetType) async {
+    if (_connection == null) return [];
+    var folder = await _connection!.file(path);
+    var allItems = await _connection!.listFiles(folder);
+    List<FileItem> result = [];
+
+    for (var item in allItems) {
+      if (hiddenPaths.contains(item.path)) continue;
+
+      if (item.isDirectory()) {
+        if (await _hasMediaDeep(item.path, targetType)) {
+          result.add(FileItem(
+            name: _extractFileName(item.path),
+            path: item.path,
+            size: 0,
+            isDirectory: true,
+            type: FileItemType.folder,
+          ));
+        }
+      }
+    }
+    return result;
+  }
+
+  Future<bool> _hasMediaDeep(String path, FileItemType targetType) async {
+    try {
+      var folder = await _connection!.file(path);
+      var files = await _connection!.listFiles(folder);
+      return files.any((f) => !f.isDirectory() && _determineType(_extractFileName(f.path)) == targetType);
+    } catch (_) {
+      return false;
     }
   }
 
@@ -36,21 +94,24 @@ class SmbService {
     } catch (_) {}
   }
 
-  Future<List<FileItem>> list(String path) async {
-    if (_connection == null) return [];
-    var folder = await _connection!.file(path);
-    var files = await _connection!.listFiles(folder);
-    
-    return files.map((f) {
-      final bool isDir = f.isDirectory();
-      return FileItem(
-        name: f.path.split('/').last.isEmpty ? f.path : f.path.split('/').last,
-        path: f.path,
-        size: f.size,
-        isDirectory: isDir,
-        type: isDir ? FileItemType.folder : FileItemType.video,
-      );
-    }).toList();
+  String _extractFileName(String path) {
+    if (path == "/" || path.isEmpty) return "Root";
+    List<String> parts = path.split(RegExp(r'[/\\]'));
+    return parts.lastWhere((s) => s.isNotEmpty, defaultValue: () => path);
+  }
+
+  FileItemType _determineType(String name) {
+    final n = name.toLowerCase();
+
+    if (n.endsWith('.mp4') || n.endsWith('.mkv') || n.endsWith('.mov') || n.endsWith('.avi')) {
+      return FileItemType.video;
+    } else if (n.endsWith('.mp3') || n.endsWith('.wav') || n.endsWith('.flac') || n.endsWith('.m4a')) {
+      return FileItemType.audio;
+    } else if (n.endsWith('.jpg') || n.endsWith('.jpeg') || n.endsWith('.png') || n.endsWith('.gif')) {
+      return FileItemType.image;
+    }
+
+    return FileItemType.other;
   }
 
   Future<void> delete(String path) async {

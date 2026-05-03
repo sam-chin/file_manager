@@ -22,6 +22,8 @@ class AppService {
 
   Future<List<FileItem>> browse(String path) => smb.list(path);
 
+  Future<List<FileItem>> listFoldersByMedia(FileItemType type) => smb.listFoldersByMedia('/', type);
+
   Future<void> deleteItem(FileItem item) => smb.delete(item.path);
 
   Future<void> playMedia(BuildContext context, FileItem item) async {
@@ -42,5 +44,12 @@ class AppService {
 
   Future<void> connect(ServerRecord server) async {
     await smb.connect(server);
+  }
+
+  String get currentServerName {
+    if (smb.connection != null) {
+      return '已连接';
+    }
+    return '未连接';
   }
 }

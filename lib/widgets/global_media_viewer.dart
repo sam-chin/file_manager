@@ -24,28 +24,9 @@ class GlobalMediaViewer extends StatelessWidget {
           body: Stack(
             children: [
               _buildMainContent(service),
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 10,
-                left: 10,
-                right: 10,
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 28),
-                      onPressed: () => service.close(),
-                    ),
-                    Expanded(
-                      child: Text(
-                        service.currentName,
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildTopBar(service, context),
               if (service.currentType == FileItemType.video || service.currentType == FileItemType.audio)
-                _buildCenterControls(service),
+                _buildPlayerUI(service),
             ],
           ),
         );
@@ -90,35 +71,108 @@ class GlobalMediaViewer extends StatelessWidget {
     );
   }
 
-  Widget _buildCenterControls(MediaService service) {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(color: Colors.black38, shape: BoxShape.circle),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.skip_previous, color: Colors.white, size: 45),
-              onPressed: service.playPrevious,
+  Widget _buildTopBar(MediaService service, BuildContext context) {
+    return Positioned(
+      top: MediaQuery.of(context).padding.top + 10,
+      left: 10,
+      right: 10,
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 28),
+            onPressed: () => service.close(),
+          ),
+          Expanded(
+            child: Text(
+              service.currentName,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(width: 30),
-            IconButton(
-              icon: Icon(
-                service.isPlaying ? Icons.pause_circle : Icons.play_circle,
-                color: Colors.white,
-                size: 85,
-              ),
-              onPressed: () => service.togglePlay(),
+          ),
+          if (service.playlist.length > 1)
+            Text(
+              '${service.currentIndex + 1} / ${service.playlist.length}',
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
             ),
-            const SizedBox(width: 30),
-            IconButton(
-              icon: const Icon(Icons.skip_next, color: Colors.white, size: 45),
-              onPressed: service.playNext,
-            ),
-          ],
-        ),
+        ],
       ),
     );
+  }
+
+  Widget _buildPlayerUI(MediaService service) {
+    return Positioned(
+      bottom: 50,
+      left: 0,
+      right: 0,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 30),
+            child: Slider(
+              activeColor: Colors.blueAccent,
+              inactiveColor: Colors.white24,
+              value: service.currentPosition.inSeconds.toDouble().clamp(0, service.totalDuration.inSeconds.toDouble()),
+              max: service.totalDuration.inSeconds.toDouble().clamp(1, double.infinity),
+              onChanged: (value) {
+                service.seek(Duration(seconds: value.toInt()));
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 30),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _formatDuration(service.currentPosition),
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                Text(
+                  _formatDuration(service.totalDuration),
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              IconButton(
+                icon: Icon(
+                  Icons.skip_previous,
+                  size: 40,
+                  color: service.hasPrevious ? Colors.white : Colors.white38,
+                ),
+                onPressed: service.hasPrevious ? () => service.playPrevious() : null,
+              ),
+              IconButton(
+                icon: Icon(
+                  service.isPlaying ? Icons.pause_circle : Icons.play_circle,
+                  size: 80,
+                  color: Colors.white,
+                ),
+                onPressed: () => service.togglePlay(),
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.skip_next,
+                  size: 40,
+                  color: service.hasNext ? Colors.white : Colors.white38,
+                ),
+                onPressed: service.hasNext ? () => service.playNext() : null,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return "$minutes:$seconds";
   }
 }

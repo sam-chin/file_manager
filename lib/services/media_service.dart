@@ -21,6 +21,12 @@ class MediaService extends ChangeNotifier {
   bool isPlaying = false;
   double progress = 0.0;
 
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+
+  Duration get currentPosition => _position;
+  Duration get totalDuration => _duration;
+
   FileItem? get currentFile {
     if (playlist.isEmpty || currentIndex >= playlist.length) return null;
     return playlist[currentIndex];
@@ -30,11 +36,8 @@ class MediaService extends ChangeNotifier {
   bool get hasNext => currentIndex < playlist.length - 1;
   bool get hasPrevious => currentIndex > 0;
 
-  Duration get playerDuration => _player.state.duration;
-  Duration get playerPosition {
-    final duration = _player.state.duration.inMilliseconds;
-    return Duration(milliseconds: (duration * progress).toInt());
-  }
+  Duration get playerDuration => _duration;
+  Duration get playerPosition => _position;
 
   void open(FileItem file, List<FileItem> allFiles) {
     playlist = allFiles.where((f) => _isMedia(f.path)).toList();
@@ -106,10 +109,16 @@ class MediaService extends ChangeNotifier {
       notifyListeners();
     });
     _player.stream.position.listen((position) {
-      final duration = _player.state.duration.inMilliseconds;
-      if (duration > 0) {
-        progress = position.inMilliseconds / duration;
+      _position = position;
+      final duration = _player.state.duration;
+      _duration = duration;
+      if (duration.inMilliseconds > 0) {
+        progress = position.inMilliseconds / duration.inMilliseconds;
       }
+      notifyListeners();
+    });
+    _player.stream.duration.listen((duration) {
+      _duration = duration;
       notifyListeners();
     });
   }
@@ -119,6 +128,7 @@ class MediaService extends ChangeNotifier {
       currentIndex++;
       _updateCurrentType();
       _startPlaying();
+      _setupListeners();
       notifyListeners();
     }
   }
@@ -128,6 +138,7 @@ class MediaService extends ChangeNotifier {
       currentIndex--;
       _updateCurrentType();
       _startPlaying();
+      _setupListeners();
       notifyListeners();
     }
   }
@@ -152,10 +163,10 @@ class MediaService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void seek(double value) {
-    final duration = _player.state.duration;
-    final position = Duration(milliseconds: (duration.inMilliseconds * value).toInt());
+  void seek(Duration position) {
     _player.seek(position);
+    _position = position;
+    notifyListeners();
   }
 
   void close() {
@@ -166,6 +177,8 @@ class MediaService extends ChangeNotifier {
     currentIndex = 0;
     isPlaying = false;
     progress = 0.0;
+    _position = Duration.zero;
+    _duration = Duration.zero;
     notifyListeners();
   }
 
