@@ -14,7 +14,8 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final AppService _appService = AppService();
-  
+  bool _isLoading = false;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -60,7 +61,6 @@ class _HomePageState extends State<HomePage> {
         ),
         onSubmitted: (value) async {
           if (value.isNotEmpty && _appService.hasActiveServer) {
-            // 搜索功能
             final results = await _appService.browse('');
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -96,7 +96,7 @@ class _HomePageState extends State<HomePage> {
               Text(
                 _appService.hasActiveServer 
                     ? _appService.currentServerName
-                    : '未连接服务器',
+                    : "未连接服务器",
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -110,7 +110,7 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '已选择',
+                    "已连接",
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.green[700],
@@ -140,7 +140,7 @@ class _HomePageState extends State<HomePage> {
       _CategoryItem(
         icon: Icons.video_library,
         color: Colors.red,
-        label: '视频',
+        label: "视频",
         count: null,
         onTap: () async {
           if (!_appService.hasActiveServer) {
@@ -151,7 +151,7 @@ class _HomePageState extends State<HomePage> {
             context,
             MaterialPageRoute(
               builder: (context) => FileBrowserPage(
-                title: '视频',
+                title: "视频",
                 filterType: FileType.video,
               ),
             ),
@@ -161,7 +161,7 @@ class _HomePageState extends State<HomePage> {
       _CategoryItem(
         icon: Icons.music_note,
         color: Colors.green,
-        label: '音乐',
+        label: "音乐",
         count: null,
         onTap: () async {
           if (!_appService.hasActiveServer) {
@@ -172,7 +172,7 @@ class _HomePageState extends State<HomePage> {
             context,
             MaterialPageRoute(
               builder: (context) => FileBrowserPage(
-                title: '音乐',
+                title: "音乐",
                 filterType: FileType.audio,
               ),
             ),
@@ -182,7 +182,7 @@ class _HomePageState extends State<HomePage> {
       _CategoryItem(
         icon: Icons.image,
         color: Colors.orange,
-        label: '图片',
+        label: "图片",
         count: null,
         onTap: () async {
           if (!_appService.hasActiveServer) {
@@ -193,7 +193,7 @@ class _HomePageState extends State<HomePage> {
             context,
             MaterialPageRoute(
               builder: (context) => FileBrowserPage(
-                title: '图片',
+                title: "图片",
                 filterType: FileType.image,
               ),
             ),
@@ -203,7 +203,7 @@ class _HomePageState extends State<HomePage> {
       _CategoryItem(
         icon: Icons.folder,
         color: Colors.blue,
-        label: '文件浏览',
+        label: "文件浏览",
         count: null,
         onTap: () async {
           if (!_appService.hasActiveServer) {
@@ -214,7 +214,7 @@ class _HomePageState extends State<HomePage> {
             context,
             MaterialPageRoute(
               builder: (context) => FileBrowserPage(
-                title: '文件浏览',
+                title: "文件浏览",
               ),
             ),
           );
@@ -235,7 +235,7 @@ class _HomePageState extends State<HomePage> {
 
   void _showNoServerMessage() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('请先在局域网共享中添加并选择服务器')),
+      const SnackBar(content: Text("请先在局域网共享中添加并选择服务器")),
     );
   }
 
@@ -286,7 +286,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 if (item.count != null)
                   Text(
-                    '${item.count} 个文件',
+                    "${item.count} 个文件",
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.grey[600],
@@ -325,56 +325,88 @@ class _HomePageState extends State<HomePage> {
               ),
             );
             if (mounted && result is ServerRecord) {
-              _appService.setCurrentServer(result);
-              setState(() {});
+              setState(() {
+                _isLoading = true;
+              });
+              try {
+                await _appService.setCurrentServer(result);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("已连接: ${result.name}")),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("连接失败: $e")),
+                  );
+                }
+              }
+              setState(() {
+                _isLoading = false;
+              });
             }
           },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.all(20),
-            child: Row(
+            child: Stack(
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.purple.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.all(12),
-                  child: const Icon(
-                    Icons.lan,
-                    color: Colors.purple,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '局域网共享',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                Row(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _appService.hasActiveServer 
-                            ? '当前服务器: ${_appService.currentServerName}'
-                            : '点击添加服务器',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
+                      padding: const EdgeInsets.all(12),
+                      child: const Icon(
+                        Icons.lan,
+                        color: Colors.purple,
+                        size: 28,
                       ),
-                    ],
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "局域网共享",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _appService.hasActiveServer 
+                                ? "当前服务器: ${_appService.currentServerName}"
+                                : "点击添加服务器",
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey[400],
+                    ),
+                  ],
+                ),
+                if (_isLoading)
+                  const Positioned(
+                    right: 40,
+                    top: 24,
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   ),
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: Colors.grey[400],
-                ),
               ],
             ),
           ),
@@ -401,7 +433,7 @@ class _HomePageState extends State<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '收藏与最近',
+            "收藏与最近",
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -411,16 +443,16 @@ class _HomePageState extends State<HomePage> {
           _buildSection(
             icon: Icons.star,
             color: Colors.amber,
-            title: '收藏',
-            subtitle: '快速访问常用文件夹',
+            title: "收藏",
+            subtitle: "快速访问常用文件夹",
             onTap: () {},
           ),
           const Divider(height: 32),
           _buildSection(
             icon: Icons.history,
             color: Colors.grey,
-            title: '最近文件',
-            subtitle: '查看最近打开的资源',
+            title: "最近文件",
+            subtitle: "查看最近打开的资源",
             onTap: () {},
           ),
         ],

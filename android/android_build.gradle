@@ -1,0 +1,48 @@
+// android/build.gradle
+// 换掉 isar 后不再需要 lStar 的 subprojects 补丁
+// 但 media_kit_libs_android_video 仍需要 compileSdk 35
+// 所以保留 subprojects 强制覆盖，确保所有插件统一用 35
+
+buildscript {
+    // Flutter 3.27.x 要求 kotlin 1.9.23+
+    ext.kotlin_version = '1.9.23'
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // AGP 8.3.2 匹配 Flutter 3.27.x 的 Gradle 8.x 要求
+        classpath 'com.android.tools.build:gradle:8.3.2'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// 强制所有插件子项目使用 compileSdk 35
+// media_kit_libs_android_video 内部可能 hardcode 旧版本，这里统一覆盖
+subprojects {
+    afterEvaluate { project ->
+        if (project.plugins.hasPlugin("com.android.application") ||
+            project.plugins.hasPlugin("com.android.library")) {
+            project.android {
+                compileSdkVersion 35
+            }
+        }
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}

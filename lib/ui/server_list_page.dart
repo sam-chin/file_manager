@@ -15,7 +15,8 @@ class ServerListPage extends StatefulWidget {
 class _ServerListPageState extends State<ServerListPage> {
   final AppService _appService = AppService();
   List<ServerRecord> _servers = [];
-  bool _isLoading = true;
+  bool _isLoading = false;
+  String? _connectingServerId;
 
   @override
   void initState() {
@@ -27,7 +28,6 @@ class _ServerListPageState extends State<ServerListPage> {
     final servers = await DatabaseService.getAllServers();
     setState(() {
       _servers = servers;
-      _isLoading = false;
     });
   }
 
@@ -35,7 +35,7 @@ class _ServerListPageState extends State<ServerListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('局域网服务器'),
+        title: const Text("局域网服务器"),
       ),
       body: _buildBody(),
       floatingActionButton: FloatingActionButton(
@@ -53,11 +53,7 @@ class _ServerListPageState extends State<ServerListPage> {
   }
 
   Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_servers.isEmpty) {
+    if (_servers.isEmpty && !_isLoading) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -69,7 +65,7 @@ class _ServerListPageState extends State<ServerListPage> {
             ),
             const SizedBox(height: 16),
             Text(
-              '还没有添加服务器',
+              "还没有添加服务器",
               style: TextStyle(
                 fontSize: 18,
                 color: Colors.grey[600],
@@ -77,7 +73,7 @@ class _ServerListPageState extends State<ServerListPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              '点击右下角的 + 按钮添加',
+              "点击右下角的 + 按钮添加",
               style: TextStyle(
                 color: Colors.grey[500],
               ),
@@ -93,6 +89,8 @@ class _ServerListPageState extends State<ServerListPage> {
       itemBuilder: (context, index) {
         final server = _servers[index];
         final isSelected = _appService.currentServer?.id == server.id;
+        final isConnecting = _connectingServerId == server.id;
+
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           color: isSelected ? Colors.blue[50] : null,
@@ -114,7 +112,7 @@ class _ServerListPageState extends State<ServerListPage> {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        '当前',
+                        "当前",
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.blue[700],
@@ -123,9 +121,18 @@ class _ServerListPageState extends State<ServerListPage> {
                       ),
                     ),
                   ),
+                if (isConnecting)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
               ],
             ),
-            subtitle: Text('${server.host}${server.port > 0 ? ':${server.port}' : ''}'),
+            subtitle: Text("${server.host}${server.port > 0 ? ':${server.port}' : ''}"),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -139,16 +146,16 @@ class _ServerListPageState extends State<ServerListPage> {
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: const Text('确认删除'),
-                        content: Text('确定要删除服务器 "${server.name}" 吗？'),
+                        title: const Text("确认删除"),
+                        content: Text("确定要删除服务器 \"${server.name}\" 吗？"),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context, false),
-                            child: const Text('取消'),
+                            child: const Text("取消"),
                           ),
                           TextButton(
                             onPressed: () => Navigator.pop(context, true),
-                            child: const Text('删除'),
+                            child: const Text("删除"),
                           ),
                         ],
                       ),
@@ -161,14 +168,28 @@ class _ServerListPageState extends State<ServerListPage> {
                 ),
               ],
             ),
-            onTap: () {
-              // 先设置为当前服务器
-              _appService.setCurrentServer(server);
-              
-              if (mounted) {
-                // 返回服务器给上一页
-                Navigator.pop(context, server);
+            onTap: isConnecting ? null : () async {
+              setState(() {
+                _connectingServerId = server.id;
+              });
+
+              try {
+                await _appService.setCurrentServer(server);
+                if (mounted) {
+                  // 连接成功后，返回服务器对象给上一页
+                  Navigator.pop(context, server);
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("连接失败: $e")),
+                  );
+                }
               }
+
+              setState(() {
+                _connectingServerId = null;
+              });
             },
           ),
         );

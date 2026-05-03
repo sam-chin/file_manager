@@ -1,11 +1,18 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:media_file_manager/services/database_service.dart';
-import 'package:media_file_manager/ui/home_page.dart';
+import 'package:media_kit/media_kit.dart'; // 必须导入
+import 'services/database_service.dart';
+import 'ui/home_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // media_kit 必须在 runApp 之前初始化，否则播放时崩溃
+  MediaKit.ensureInitialized();
+
+  // 初始化 sqflite 数据库
   await DatabaseService.initialize();
+
   runApp(const MyApp());
 }
 

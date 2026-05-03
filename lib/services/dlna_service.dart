@@ -1,48 +1,62 @@
+// lib/services/dlna_service.dart
+// 使用 dlna_dart 0.1.0 的正确 API:
+//   DLNAManager().start() → manager
+//   manager.devices.stream.listen((Map<String, DLNADevice> deviceMap) {})
+//   searcher.stop() 关闭搜索
+
+import 'dart:async';
 import 'package:dlna_dart/dlna_dart.dart';
 
 class DlnaService {
-  // GitHub 编译：延迟初始化，避免静态初始化错误
-  DLNAManager? _manager;
-  final List<dynamic> _discoveredDevices = [];
+  final DLNAManager _searcher = DLNAManager();
 
-  List<dynamic> get devices => List.unmodifiable(_discoveredDevices);
+  // 已发现的设备（key = UDN，value = DLNADevice）
+  final Map<String, DLNADevice> _devices = {};
+  StreamSubscription? _subscription;
 
-  void init() {
-    _manager = DLNAManager();
-    _manager?.setRefershCallback((devices) {
-      _discoveredDevices.clear();
-      _discoveredDevices.addAll(devices);
-      
-      for (var device in devices) {
-        // 使用动态类型访问，避免编译期找不到类型
-        try {
-          print("找到设备: ${device.info.friendlyName}");
-        } catch (e) {
-          print("设备信息读取失败: $e");
-        }
-      }
+  Map<String, DLNADevice> get devices => Map.unmodifiable(_devices);
+
+  /// 开始搜索 DLNA 设备，通过 [onDevicesChanged] 回调通知 UI 刷新
+  Future<void> startSearch({
+    void Function(Map<String, DLNADevice> devices)? onDevicesChanged,
+  }) async {
+    await stopSearch(); // 先停止上一次搜索
+
+    final manager = await _searcher.start();
+
+    _subscription = manager.devices.stream.listen((deviceMap) {
+      _devices
+        ..clear()
+        ..addAll(deviceMap);
+      onDevicesChanged?.call(Map.unmodifiable(_devices));
     });
   }
 
-  Future<void> startSearch() async {
-    if (_manager == null) {
-      init();
-    }
-    _manager?.startSearch();
-  }
-
   Future<void> stopSearch() async {
-    _manager?.stop();
+    await _subscription?.cancel();
+    _subscription = null;
+    _searcher.stop();
+    _devices.clear();
   }
 
-  Future<void> cast(dynamic device, String url, String title) async {
-    // GitHub 编译：使用动态类型判断，规避类型找不到问题
+  /// 向指定设备投屏
+  /// [device] 从 devices 中取得的 DLNADevice
+  /// [url]    媒体资源的 HTTP URL（需要代理服务器提供）
+  /// [title]  显示标题
+  Future<void> cast(DLNADevice device, String url, String title) async {
     try {
-      // 尝试直接调用 play 方法
-      await device.play(url, title: title);
+      await device.setUrl(url, title);
+      await device.play();
     } catch (e) {
-      print("投屏失败: $e");
       rethrow;
     }
+  }
+
+  Future<void> pause(DLNADevice device) async {
+    await device.pause();
+  }
+
+  Future<void> stop(DLNADevice device) async {
+    await device.stop();
   }
 }

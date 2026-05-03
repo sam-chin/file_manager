@@ -1,78 +1,98 @@
-import 'package:isar/isar.dart';
-import 'package:path_provider/path_provider.dart';
+// lib/services/database_service.dart
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 import '../models/server_record.dart';
-import '../models/playback_history.dart';
-import '../models/cached_file.dart';
 
 class DatabaseService {
-  static late final Isar isar;
+  static Database? _db;
 
-  static Future<void> initialize() async {
-    final dir = await getApplicationDocumentsDirectory();
-    isar = await Isar.open(
-      [ServerRecordSchema, PlaybackHistorySchema, CachedFileSchema],
-      directory: dir.path,
+  static Future<Database> get _database async {
+    _db ??= await _initDb();
+    return _db!;
+  }
+
+  static Future<Database> _initDb() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'media_manager.db');
+
+    return openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE servers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            host TEXT NOT NULL,
+            port INTEGER DEFAULT 0,
+            share TEXT,
+            domain TEXT,
+            username TEXT,
+            encrypted_password TEXT,
+            created_at INTEGER NOT NULL,
+            last_connected INTEGER
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE playback_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_url TEXT NOT NULL UNIQUE,
+            position_ms INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+      },
     );
   }
 
+  // ── Server CRUD ──────────────────────────────────────────
+
   static Future<List<ServerRecord>> getAllServers() async {
-    return isar.serverRecords.where().findAll();
+    final db = await _database;
+    final rows = await db.query('servers', orderBy: 'created_at DESC');
+    return rows.map(ServerRecord.fromMap).toList();
   }
 
   static Future<ServerRecord?> getServer(int id) async {
-    return isar.serverRecords.get(id);
+    final db = await _database;
+    final rows = await db.query('servers', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return ServerRecord.fromMap(rows.first);
   }
 
   static Future<void> saveServer(ServerRecord server) async {
-    await isar.writeTxn(() async {
-      await isar.serverRecords.put(server);
-    });
+    final db = await _database;
+    if (server.id == null) {
+      final id = await db.insert('servers', server.toMap());
+      server.id = id;
+    } else {
+      await db.update('servers', server.toMap(),
+          where: 'id = ?', whereArgs: [server.id]);
+    }
   }
 
   static Future<void> deleteServer(int id) async {
-    await isar.writeTxn(() async {
-      await isar.serverRecords.delete(id);
-    });
+    final db = await _database;
+    await db.delete('servers', where: 'id = ?', whereArgs: [id]);
   }
 
-  static Future<PlaybackHistory?> getPlaybackHistory(String fileUrl) async {
-    return isar.playbackHistorys
-        .filter()
-        .fileUrlEqualTo(fileUrl)
-        .findFirst();
+  // ── Playback History ─────────────────────────────────────
+
+  static Future<int?> getPlaybackPosition(String fileUrl) async {
+    final db = await _database;
+    final rows = await db.query('playback_history',
+        where: 'file_url = ?', whereArgs: [fileUrl]);
+    if (rows.isEmpty) return null;
+    return rows.first['position_ms'] as int;
   }
 
-  static Future<void> savePlaybackHistory(PlaybackHistory history) async {
-    await isar.writeTxn(() async {
-      await isar.playbackHistorys.put(history);
-    });
-  }
-
-  static Future<List<CachedFile>> getCachedFiles(int serverId) async {
-    return isar.cachedFiles
-        .filter()
-        .serverIdEqualTo(serverId)
-        .findAll();
-  }
-
-  static Future<void> saveCachedFile(CachedFile file) async {
-    await isar.writeTxn(() async {
-      await isar.cachedFiles.put(file);
-    });
-  }
-
-  static Future<void> saveCachedFiles(List<CachedFile> files) async {
-    await isar.writeTxn(() async {
-      await isar.cachedFiles.putAll(files);
-    });
-  }
-
-  static Future<void> clearCache(int serverId) async {
-    await isar.writeTxn(() async {
-      await isar.cachedFiles
-          .filter()
-          .serverIdEqualTo(serverId)
-          .deleteAll();
-    });
+  static Future<void> savePlaybackPosition(
+      String fileUrl, int positionMs) async {
+    final db = await _database;
+    await db.insert(
+      'playback_history',
+      {'file_url': fileUrl, 'position_ms': positionMs},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 }

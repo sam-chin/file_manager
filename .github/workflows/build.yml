@@ -20,46 +20,32 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: 34
-          build-tools: 34.0.0
-
+      # Flutter 3.27.4：ubuntu-latest 完全支持
+      # smb_connect 在此版本 release build 正常
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: '3.27.4'
           cache: true
 
-      - name: Force Clean & Install dependencies (GitHub 缓存清理)
-        run: |
-          rm -f pubspec.lock
-          flutter clean
-          # GitHub 环境必须：强制清理 pub 缓存，避免 No such file or directory
-          flutter pub cache clean --force
-          flutter pub get
-          # GitHub 环境必须：强制预下载所有平台二进制文件
-          flutter precache
+      - name: Install dependencies
+        run: flutter pub get
 
-      - name: Generate Isar code
-        run: dart run build_runner build --delete-conflicting-outputs
+      # 换掉 isar 后不再需要 build_runner 代码生成这一步
+      # 如果将来重新引入代码生成包再加回来
 
-      - name: Fake Android SDK 36
+      # media_kit_libs_android_video 需要 SDK 35
+      - name: Install Android SDK 35
         run: |
-          cd $ANDROID_HOME/platforms
-          if [ ! -d "android-36" ]; then
-            sudo ln -s android-34 android-36
-            echo "Faked Android SDK 36 using SDK 34"
-          fi
+          SDKMANAGER=$(find $ANDROID_HOME/cmdline-tools -name "sdkmanager" 2>/dev/null | head -1)
+          echo "y" | $SDKMANAGER "platforms;android-35" "build-tools;35.0.0"
 
       - name: Build APK
-        run: |
-          export GRADLE_OPTS="-Dhttp.connectionTimeout=600000 -Dhttp.socketTimeout=600000"
-          flutter build apk --release --no-tree-shake-icons
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk
+          name: release-apk-${{ github.run_number }}
           path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
