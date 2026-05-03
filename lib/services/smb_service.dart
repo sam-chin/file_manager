@@ -97,7 +97,7 @@ class SmbService {
   String _extractFileName(String path) {
     if (path == "/" || path.isEmpty) return "Root";
     List<String> parts = path.split(RegExp(r'[/\\]'));
-    return parts.lastWhere((s) => s.isNotEmpty, defaultValue: () => path);
+    return parts.lastWhere((s) => s.isNotEmpty, orElse: () => path);
   }
 
   FileItemType _determineType(String name) {
