@@ -5,6 +5,8 @@ import '../models/server_record.dart';
 
 class SmbService {
   SmbConnect? _connection;
+  
+  SmbConnect? get connection => _connection;
 
   Future<void> connect(ServerRecord server) async {
     await close();
