@@ -32,6 +32,11 @@ jobs:
           flutter-version: '3.19.0'
           cache: true
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.4
+
       - name: Install Dependencies
         run: |
           rm -f pubspec.lock
@@ -40,8 +45,12 @@ jobs:
           flutter pub get
           flutter precache
 
-      - name: Build APK
-        run: flutter build apk --release
+      - name: Build with Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          cd ..
+          flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
