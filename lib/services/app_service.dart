@@ -41,6 +41,6 @@ class AppService {
   }
 
   Future<void> connect(ServerRecord server) async {
-    await smb.connect(server.ip, server.username, server.password);
+    await smb.connect(server);
   }
 }
