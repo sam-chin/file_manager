@@ -36,22 +36,33 @@ class DBHelper {
     );
   }
 
-  // 保存服务器
   Future<int> insertServer(ServerRecord server) async {
     final db = await database;
     return await db.insert('servers', server.toMap());
   }
 
-  // 获取所有服务器
+  Future<int> updateServer(ServerRecord server) async {
+    final db = await database;
+    return await db.update(
+      'servers',
+      server.toMap(),
+      where: 'id = ?',
+      whereArgs: [server.id],
+    );
+  }
+
+  Future<int> deleteServer(int id) async {
+    final db = await database;
+    return await db.delete(
+      'servers',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<List<ServerRecord>> getServers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('servers');
     return List.generate(maps.length, (i) => ServerRecord.fromMap(maps[i]));
-  }
-
-  // 删除服务器
-  Future<int> deleteServer(int id) async {
-    final db = await database;
-    return await db.delete('servers', where: 'id = ?', whereArgs: [id]);
   }
 }

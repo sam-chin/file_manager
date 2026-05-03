@@ -10,44 +10,60 @@ class ServerListPage extends StatefulWidget {
 }
 
 class _ServerListPageState extends State<ServerListPage> {
-  void _showAddServerDialog() {
-    final nameController = TextEditingController();
-    final ipController = TextEditingController();
-    final shareController = TextEditingController(text: "C\$");
-    final userController = TextEditingController();
-    final passController = TextEditingController();
+  void _showServerDialog({ServerRecord? existingServer}) {
+    final nameController = TextEditingController(text: existingServer?.name);
+    final ipController = TextEditingController(text: existingServer?.ip);
+    final userController = TextEditingController(text: existingServer?.username);
+    final passController = TextEditingController(text: existingServer?.password);
+    final shareController = TextEditingController(text: existingServer?.shareName ?? "");
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("添加 SMB 设备"),
+        title: Text(existingServer == null ? "添加设备" : "修改设备"),
         content: SingleChildScrollView(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: "设备名称")),
+              TextField(controller: nameController, decoration: const InputDecoration(labelText: "名称")),
               TextField(controller: ipController, decoration: const InputDecoration(labelText: "IP 地址")),
-              TextField(controller: shareController, decoration: const InputDecoration(labelText: "共享文件夹名 (如 C\$, Downloads)")),
-              TextField(controller: userController, decoration: const InputDecoration(labelText: "账号")),
+              TextField(controller: shareController, decoration: const InputDecoration(labelText: "共享名 (可选，留空则访问根目录)")),
+              TextField(controller: userController, decoration: const InputDecoration(labelText: "用户名 (支持中文)")),
               TextField(controller: passController, decoration: const InputDecoration(labelText: "密码"), obscureText: true),
             ],
           ),
         ),
         actions: [
+          if (existingServer != null)
+            TextButton(
+              onPressed: () async {
+                await AppService().db.deleteServer(existingServer.id!);
+                await AppService().init();
+                if (mounted) setState(() {});
+                if (mounted) Navigator.pop(context);
+              },
+              child: const Text("删除", style: TextStyle(color: Colors.red)),
+            ),
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("取消")),
           ElevatedButton(
             onPressed: () async {
-              final newServer = ServerRecord(
+              final server = ServerRecord(
+                id: existingServer?.id,
                 name: nameController.text,
                 ip: ipController.text,
-                shareName: shareController.text,
                 username: userController.text,
                 password: passController.text,
+                shareName: shareController.text.isEmpty ? null : shareController.text,
               );
-              await AppService().db.insertServer(newServer);
+
+              if (existingServer == null) {
+                await AppService().db.insertServer(server);
+              } else {
+                await AppService().db.updateServer(server);
+              }
+              
               await AppService().init();
               if (mounted) setState(() {});
-              Navigator.pop(context);
+              if (mounted) Navigator.pop(context);
             },
             child: const Text("保存"),
           ),
@@ -69,7 +85,9 @@ class _ServerListPageState extends State<ServerListPage> {
             itemBuilder: (context, index) => ListTile(
               leading: const Icon(Icons.storage, color: Colors.blue),
               title: Text(servers[index].name),
-              subtitle: Text("${servers[index].ip} / ${servers[index].shareName}"),
+              subtitle: Text(servers[index].shareName == null || servers[index].shareName!.isEmpty
+                  ? servers[index].ip
+                  : "${servers[index].ip} / ${servers[index].shareName}"),
               onTap: () async {
                 try {
                   await AppService().connect(servers[index]);
@@ -79,14 +97,15 @@ class _ServerListPageState extends State<ServerListPage> {
                   Navigator.pop(context);
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("连接失败: $e")));
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$e")));
                   }
                 }
               },
+              onLongPress: () => _showServerDialog(existingServer: servers[index]),
             ),
           ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddServerDialog,
+        onPressed: () => _showServerDialog(),
         child: const Icon(Icons.add),
       ),
     );

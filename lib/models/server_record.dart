@@ -1,10 +1,10 @@
 class ServerRecord {
-  final int? id;
-  final String name;
-  final String ip;
-  final String username;
-  final String password;
-  final String shareName;
+  int? id;
+  String name;
+  String ip;
+  String username;
+  String password;
+  String? shareName;
   final String type;
 
   ServerRecord({
@@ -13,7 +13,7 @@ class ServerRecord {
     required this.ip,
     required this.username,
     required this.password,
-    required this.shareName,
+    this.shareName,
     this.type = 'SMB',
   });
 
@@ -24,7 +24,7 @@ class ServerRecord {
       'ip': ip,
       'username': username,
       'password': password,
-      'shareName': shareName,
+      'shareName': shareName ?? "",
       'type': type,
     };
   }
@@ -36,7 +36,7 @@ class ServerRecord {
       ip: map['ip'],
       username: map['username'],
       password: map['password'],
-      shareName: map['shareName'] ?? 'C\$',
+      shareName: map['shareName'],
       type: map['type'] ?? 'SMB',
     );
   }
