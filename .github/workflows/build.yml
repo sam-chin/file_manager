@@ -1,4 +1,4 @@
-name: Flutter Build APK
+name: Build APK
 
 on: [push, pull_request]
 
@@ -20,11 +20,15 @@ jobs:
           flutter-version: '3.19.0'
           channel: 'stable'
 
-      - name: Fix Permissions and Env
+      - name: Reset Pub Cache & Get Deps
         run: |
-          if [ -f "android/gradlew" ]; then chmod +x android/gradlew; fi
-          flutter pub cache clean -f
+          rm -rf $PUB_CACHE
+          flutter clean
           flutter pub get
 
+      - name: Verify Dependencies
+        run: flutter pub deps | grep collection
+
       - name: Build APK
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release --no-tree-shake-icons

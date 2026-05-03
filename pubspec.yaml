@@ -1,7 +1,6 @@
 name: media_file_manager
-description: A professional media manager with SMB and DLNA support
+description: "A specialized media manager for SMB and DLNA."
 publish_to: 'none'
-
 version: 1.0.0+1
 
 environment:
@@ -10,32 +9,17 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.6
-
   smb_connect: 0.0.9
   dlna_dart: 0.0.8
-
+  sqflite: ^2.3.0
   media_kit: ^1.1.10
   media_kit_video: ^1.1.4
   media_kit_libs_video: ^1.0.4
-
   shelf: ^1.4.1
   shelf_router: ^1.1.4
-
-  provider: ^6.1.1
   path_provider: ^2.1.2
-  shared_preferences: ^2.2.2
   path: ^1.8.3
-  sqflite: ^2.3.0
 
 dependency_overrides:
-  xml: ^6.3.0
-  collection: ^1.18.0
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^3.0.0
-
-flutter:
-  uses-material-design: true
+  collection: 1.18.0
+  xml: 6.3.0
