@@ -26,7 +26,7 @@
 /coverage/
 /android/.gradle/
 /android/app/gradle/
-/android/gradle/
+# /android/gradle/  # 注释掉，允许 gradlew 上传
 /android/app/build/
 /android/build/
 /.idea/

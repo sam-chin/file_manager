@@ -30,6 +30,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.0'
+          channel: 'stable'
           cache: true
 
       - name: Setup Gradle
@@ -37,7 +38,7 @@ jobs:
         with:
           gradle-version: 8.4
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           rm -f pubspec.lock
           flutter clean
@@ -45,12 +46,8 @@ jobs:
           flutter pub get
           flutter precache
 
-      - name: Build with Gradle
-        run: |
-          cd android
-          chmod +x gradlew
-          cd ..
-          flutter build apk --release
+      - name: Build APK
+        run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
