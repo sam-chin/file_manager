@@ -32,20 +32,22 @@ jobs:
           flutter-version: '3.19.0'
           cache: true
 
-      - name: Force Clean & Install dependencies
+      - name: Force Clean & Install dependencies (GitHub 缓存清理)
         run: |
           rm -f pubspec.lock
           flutter clean
+          # GitHub 环境必须：强制清理 pub 缓存，避免 No such file or directory
+          flutter pub cache clean --force
           flutter pub get
+          # GitHub 环境必须：强制预下载所有平台二进制文件
+          flutter precache
 
       - name: Generate Isar code
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Fake Android SDK 36
         run: |
-          # 进入 Android SDK 平台目录
           cd $ANDROID_HOME/platforms
-          # 检查是否存在 android-36，如果不存在，把 34 链接过去
           if [ ! -d "android-36" ]; then
             sudo ln -s android-34 android-36
             echo "Faked Android SDK 36 using SDK 34"
