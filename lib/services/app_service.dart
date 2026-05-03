@@ -5,7 +5,6 @@ import 'smb_service.dart';
 import 'ftp_service.dart';
 import 'dlna_service.dart';
 import 'stream_proxy_server.dart';
-import 'package:dlna_dart/dlna_dart.dart';
 
 class AppService {
   static final AppService _instance = AppService._internal();
@@ -50,14 +49,13 @@ class AppService {
     if (_activeServer?.type == ServerType.smb) {
       return await _proxyServer.startProxy(item, _activeServer!);
     }
-    // FTP 直接返回路径，代理服务器后续实现
     return item.path;
   }
 
   // ── DLNA 投屏 ─────────────────────────────────────────────
 
   Future<void> startDlnaSearch({
-    void Function(Map<String, DLNADevice> devices)? onDevicesChanged,
+    void Function(List<dynamic> devices)? onDevicesChanged,
   }) async {
     await _dlnaService.startSearch(onDevicesChanged: onDevicesChanged);
   }
@@ -66,13 +64,13 @@ class AppService {
     await _dlnaService.stopSearch();
   }
 
-  Map<String, DLNADevice> get dlnaDevices => _dlnaService.devices;
+  List<dynamic> get dlnaDevices => _dlnaService.devices;
 
-  Future<void> castToDevice(FileItem item, DLNADevice device) async {
+  Future<void> castToDevice(FileItem item, dynamic device) async {
     final playUrl = await preparePlayback(item);
     await _dlnaService.cast(device, playUrl, item.name);
   }
 
-  Future<void> pauseDlna(DLNADevice device) => _dlnaService.pause(device);
-  Future<void> stopDlna(DLNADevice device) => _dlnaService.stop(device);
+  Future<void> pauseDlna(dynamic device) => _dlnaService.pause(device);
+  Future<void> stopDlna(dynamic device) => _dlnaService.stop(device);
 }

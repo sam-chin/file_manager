@@ -1,62 +1,57 @@
 // lib/services/dlna_service.dart
-// 使用 dlna_dart 0.1.0 的正确 API:
-//   DLNAManager().start() → manager
-//   manager.devices.stream.listen((Map<String, DLNADevice> deviceMap) {})
-//   searcher.stop() 关闭搜索
+// 使用 dlna_dart 0.0.8 的正确 API
+// 注意：setRefershCallback 是原包的拼写（不是 setRefreshCallback）
 
-import 'dart:async';
 import 'package:dlna_dart/dlna_dart.dart';
 
 class DlnaService {
-  final DLNAManager _searcher = DLNAManager();
+  final DLNAManager _manager = DLNAManager();
+  final List<dynamic> _devices = [];
 
-  // 已发现的设备（key = UDN，value = DLNADevice）
-  final Map<String, DLNADevice> _devices = {};
-  StreamSubscription? _subscription;
+  List<dynamic> get devices => List.unmodifiable(_devices);
 
-  Map<String, DLNADevice> get devices => Map.unmodifiable(_devices);
-
-  /// 开始搜索 DLNA 设备，通过 [onDevicesChanged] 回调通知 UI 刷新
   Future<void> startSearch({
-    void Function(Map<String, DLNADevice> devices)? onDevicesChanged,
+    void Function(List<dynamic> devices)? onDevicesChanged,
   }) async {
-    await stopSearch(); // 先停止上一次搜索
+    _devices.clear();
 
-    final manager = await _searcher.start();
-
-    _subscription = manager.devices.stream.listen((deviceMap) {
-      _devices
-        ..clear()
-        ..addAll(deviceMap);
-      onDevicesChanged?.call(Map.unmodifiable(_devices));
+    // 0.0.8 API: setRefershCallback（原包拼写错误，保留）
+    _manager.setRefershCallback((deviceList) {
+      _devices.clear();
+      _devices.addAll(deviceList);
+      onDevicesChanged?.call(List.unmodifiable(_devices));
     });
+
+    _manager.startSearch();
   }
 
   Future<void> stopSearch() async {
-    await _subscription?.cancel();
-    _subscription = null;
-    _searcher.stop();
+    _manager.stop();
     _devices.clear();
   }
 
-  /// 向指定设备投屏
-  /// [device] 从 devices 中取得的 DLNADevice
-  /// [url]    媒体资源的 HTTP URL（需要代理服务器提供）
-  /// [title]  显示标题
-  Future<void> cast(DLNADevice device, String url, String title) async {
+  // device 为 dynamic，因为 0.0.8 不导出具体类型
+  Future<void> cast(dynamic device, String url, String title) async {
     try {
-      await device.setUrl(url, title);
-      await device.play();
+      await device.play(url, title: title);
     } catch (e) {
       rethrow;
     }
   }
 
-  Future<void> pause(DLNADevice device) async {
-    await device.pause();
+  Future<void> pause(dynamic device) async {
+    try {
+      await device.pause();
+    } catch (e) {
+      rethrow;
+    }
   }
 
-  Future<void> stop(DLNADevice device) async {
-    await device.stop();
+  Future<void> stop(dynamic device) async {
+    try {
+      await device.stop();
+    } catch (e) {
+      rethrow;
+    }
   }
 }

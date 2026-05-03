@@ -1,9 +1,5 @@
 // lib/services/ftp_service.dart
-// 补充 listFiles(ServerRecord, path) 接口与 AppService 对接
-// 内部复用原有 FTPConnect 逻辑
-
 import 'dart:async';
-import 'dart:io';
 import 'package:ftpconnect/ftpconnect.dart';
 import '../models/file_item.dart';
 import '../models/server_record.dart';
@@ -16,9 +12,8 @@ class FtpService {
   FTPConnect? _client;
   int? _connectedServerId;
 
-  /// AppService 调用的统一接口，自动管理连接
+  /// AppService 统一调用入口，自动管理连接
   Future<List<FileItem>> listFiles(ServerRecord server, String path) async {
-    // 如果连的不是同一台服务器，重新连接
     if (_client == null || _connectedServerId != server.id) {
       await _disconnect();
       await _connect(server);
@@ -34,7 +29,8 @@ class FtpService {
           .where((e) => e.name != '.' && e.name != '..')
           .map((e) {
             final isDir = e.type == FTPEntryType.DIR;
-            final filePath = path.isEmpty ? e.name : '$path/${e.name}';
+            final filePath =
+                path.isEmpty ? e.name : '$path/${e.name}';
             return FileItem(
               name: e.name,
               path: filePath,

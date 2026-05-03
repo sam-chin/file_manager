@@ -1,5 +1,5 @@
 // lib/models/server_record.dart
-// 去掉所有 isar 注解，改为纯 Dart 类 + sqflite Map 序列化
+// 纯 Dart 类，去掉所有 isar 注解，改用 sqflite Map 序列化
 
 enum ServerType { smb, ftp }
 
@@ -30,7 +30,6 @@ class ServerRecord {
     this.lastConnected,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  // sqflite 序列化
   Map<String, dynamic> toMap() => {
         if (id != null) 'id': id,
         'type': type.index,
@@ -55,11 +54,9 @@ class ServerRecord {
         domain: map['domain'] as String?,
         username: map['username'] as String?,
         encryptedPassword: map['encrypted_password'] as String?,
-        createdAt: DateTime.fromMillisecondsSinceEpoch(
-            map['created_at'] as int),
+        createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
         lastConnected: map['last_connected'] != null
-            ? DateTime.fromMillisecondsSinceEpoch(
-                map['last_connected'] as int)
+            ? DateTime.fromMillisecondsSinceEpoch(map['last_connected'] as int)
             : null,
       );
 }

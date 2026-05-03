@@ -1,42 +1,13 @@
-// 放在根目录 android/build.gradle 的最顶部
-allprojects {
-    configurations.all {
-        resolutionStrategy {
-            force 'com.android.support:support-v4:28.0.0'
-        }
-    }
-}
-
-// 强力覆盖子插件配置
-subprojects { project ->
-    project.afterEvaluate {
-        if (project.hasProperty('android')) {
-            android {
-                // 强制将 compileSdk 降回 34
-                compileSdkVersion 34
-                buildToolsVersion "34.0.0"
-                
-                defaultConfig {
-                    targetSdkVersion 34
-                }
-                
-                // 关键：跳过那些讨厌的资源检查
-                aaptOptions {
-                    namespaced = false
-                }
-            }
-        }
-    }
-}
+// android/build.gradle
 
 buildscript {
-    ext.kotlin_version = '1.9.0'
+    ext.kotlin_version = '1.9.23'
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.4.2'
+        classpath 'com.android.tools.build:gradle:8.3.2'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
@@ -48,11 +19,22 @@ allprojects {
     }
 }
 
+// 强制所有插件子项目使用 compileSdk 35
+// 解决 media_kit_libs_android_video 内部 hardcode 旧版本的问题
+subprojects {
+    afterEvaluate { project ->
+        if (project.plugins.hasPlugin("com.android.application") ||
+            project.plugins.hasPlugin("com.android.library")) {
+            project.android {
+                compileSdkVersion 35
+            }
+        }
+    }
+}
+
 rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
-}
-subprojects {
     project.evaluationDependsOn(':app')
 }
 

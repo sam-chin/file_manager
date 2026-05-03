@@ -6,6 +6,10 @@ import '../models/server_record.dart';
 class DatabaseService {
   static Database? _db;
 
+  static Future<void> initialize() async {
+    _db = await _initDb();
+  }
+
   static Future<Database> get _database async {
     _db ??= await _initDb();
     return _db!;
@@ -63,11 +67,15 @@ class DatabaseService {
   static Future<void> saveServer(ServerRecord server) async {
     final db = await _database;
     if (server.id == null) {
-      final id = await db.insert('servers', server.toMap());
-      server.id = id;
+      final newId = await db.insert('servers', server.toMap());
+      server.id = newId;
     } else {
-      await db.update('servers', server.toMap(),
-          where: 'id = ?', whereArgs: [server.id]);
+      await db.update(
+        'servers',
+        server.toMap(),
+        where: 'id = ?',
+        whereArgs: [server.id],
+      );
     }
   }
 
@@ -80,8 +88,11 @@ class DatabaseService {
 
   static Future<int?> getPlaybackPosition(String fileUrl) async {
     final db = await _database;
-    final rows = await db.query('playback_history',
-        where: 'file_url = ?', whereArgs: [fileUrl]);
+    final rows = await db.query(
+      'playback_history',
+      where: 'file_url = ?',
+      whereArgs: [fileUrl],
+    );
     if (rows.isEmpty) return null;
     return rows.first['position_ms'] as int;
   }

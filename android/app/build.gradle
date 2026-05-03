@@ -1,3 +1,5 @@
+// android/app/build.gradle
+
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
@@ -20,7 +22,7 @@ apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
     namespace "com.example.media_file_manager"
-    compileSdkVersion 34
+    compileSdkVersion 35
     ndkVersion flutter.ndkVersion
 
     compileOptions {
@@ -39,26 +41,17 @@ android {
     defaultConfig {
         applicationId "com.example.media_file_manager"
         minSdkVersion 21
-        targetSdkVersion 34
+        targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
     }
 
-    // 强力补丁：强制所有依赖库使用 SDK 34 编译，无视插件内部的要求
-    configurations.all {
-        resolutionStrategy {
-            eachDependency { details ->
-                if (details.requested.group == 'com.android.tools.build' && details.requested.name == 'gradle') {
-                    details.useVersion '7.4.2'
-                }
-            }
-        }
-    }
-
     buildTypes {
         release {
             signingConfig signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }

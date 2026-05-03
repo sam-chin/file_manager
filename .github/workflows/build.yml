@@ -20,8 +20,7 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # Flutter 3.27.4：ubuntu-latest 完全支持
-      # smb_connect 在此版本 release build 正常
+      # Flutter 3.27.4 = Dart 3.6.2，与所有依赖包兼容
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -30,9 +29,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-
-      # 换掉 isar 后不再需要 build_runner 代码生成这一步
-      # 如果将来重新引入代码生成包再加回来
 
       # media_kit_libs_android_video 需要 SDK 35
       - name: Install Android SDK 35
