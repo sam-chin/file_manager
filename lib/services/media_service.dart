@@ -17,6 +17,7 @@ class MediaService extends ChangeNotifier {
   List<FileItem> playlist = [];
   int currentIndex = 0;
   MediaCategory category = MediaCategory.none;
+  FileItemType currentType = FileItemType.other;
   bool isPlaying = false;
   double progress = 0.0;
 
@@ -35,9 +36,7 @@ class MediaService extends ChangeNotifier {
     return Duration(milliseconds: (duration * progress).toInt());
   }
 
-  // 更新：接收当前文件和整个目录的文件列表
   void open(FileItem file, List<FileItem> allFiles) {
-    // 过滤出支持的媒体格式
     playlist = allFiles.where((f) => _isMedia(f.path)).toList();
     currentIndex = playlist.indexWhere((f) => f.path == file.path);
     if (currentIndex < 0) {
@@ -45,40 +44,38 @@ class MediaService extends ChangeNotifier {
       currentIndex = 0;
     }
     
-    _updateCategory();
+    _updateCurrentType();
     _startPlaying();
     _setupListeners();
     notifyListeners();
   }
 
-  void _updateCategory() {
+  void _updateCurrentType() {
     if (currentFile == null) {
+      currentType = FileItemType.other;
       category = MediaCategory.none;
       return;
     }
-    String path = currentFile!.path.toLowerCase();
-    if (path.endsWith('.mp4') || path.endsWith('.mkv') || path.endsWith('.mov') || 
-        path.endsWith('.avi') || path.endsWith('.flv') || path.endsWith('.wmv')) {
+    final path = currentFile!.path.toLowerCase();
+    
+    if (currentFile!.isDirectory) {
+      currentType = FileItemType.folder;
+      category = MediaCategory.none;
+    } else if (path.endsWith('.mp4') || path.endsWith('.mkv') || path.endsWith('.mov') || 
+               path.endsWith('.avi') || path.endsWith('.flv') || path.endsWith('.wmv')) {
+      currentType = FileItemType.video;
       category = MediaCategory.video;
     } else if (path.endsWith('.mp3') || path.endsWith('.flac') || path.endsWith('.wav') || 
                path.endsWith('.m4a') || path.endsWith('.aac')) {
+      currentType = FileItemType.audio;
       category = MediaCategory.audio;
     } else if (path.endsWith('.jpg') || path.endsWith('.png') || path.endsWith('.gif') || 
                path.endsWith('.webp') || path.endsWith('.bmp')) {
+      currentType = FileItemType.image;
       category = MediaCategory.image;
     } else {
+      currentType = FileItemType.other;
       category = MediaCategory.none;
-    }
-  }
-
-  void _startPlaying() {
-    if (currentFile == null) return;
-    if (category == MediaCategory.audio || category == MediaCategory.video) {
-      _player.open(Media(currentFile!.path));
-      _player.play();
-      isPlaying = true;
-    } else {
-      isPlaying = false;
     }
   }
 
@@ -90,6 +87,17 @@ class MediaService extends ChangeNotifier {
            p.endsWith('.m4a') || p.endsWith('.aac') ||
            p.endsWith('.jpg') || p.endsWith('.png') || p.endsWith('.gif') || 
            p.endsWith('.webp') || p.endsWith('.bmp');
+  }
+
+  void _startPlaying() {
+    if (currentFile == null) return;
+    if (category == MediaCategory.audio || category == MediaCategory.video) {
+      _player.open(Media(currentFile!.path));
+      _player.play();
+      isPlaying = true;
+    } else {
+      isPlaying = false;
+    }
   }
 
   void _setupListeners() {
@@ -106,20 +114,29 @@ class MediaService extends ChangeNotifier {
     });
   }
 
-  void next() {
+  void playNext() {
     if (hasNext) {
       currentIndex++;
-      _updateCategory();
+      _updateCurrentType();
       _startPlaying();
       notifyListeners();
     }
   }
 
-  void previous() {
+  void playPrevious() {
     if (hasPrevious) {
       currentIndex--;
-      _updateCategory();
+      _updateCurrentType();
       _startPlaying();
+      notifyListeners();
+    }
+  }
+
+  void updateIndex(int index) {
+    if (index >= 0 && index < playlist.length) {
+      currentIndex = index;
+      _updateCurrentType();
+      _setupListeners();
       notifyListeners();
     }
   }
@@ -144,6 +161,7 @@ class MediaService extends ChangeNotifier {
   void close() {
     _player.stop();
     category = MediaCategory.none;
+    currentType = FileItemType.other;
     playlist = [];
     currentIndex = 0;
     isPlaying = false;
@@ -151,7 +169,6 @@ class MediaService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 兼容旧接口
   void openFile(FileItem file, {List<FileItem>? folderFiles}) {
     if (folderFiles != null) {
       open(file, folderFiles);
@@ -166,7 +183,7 @@ class MediaService extends ChangeNotifier {
       path: url,
       size: 0,
       isDirectory: false,
-      type: isVideo ? FileItemType.video : FileItemType.unknown,
+      type: isVideo ? FileItemType.video : FileItemType.other,
     );
     open(file, [file]);
   }

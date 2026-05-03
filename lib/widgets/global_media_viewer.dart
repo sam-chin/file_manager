@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import '../services/media_service.dart';
+import '../models/file_item.dart';
 
 class GlobalMediaViewer extends StatelessWidget {
   const GlobalMediaViewer({super.key});
@@ -11,15 +12,39 @@ class GlobalMediaViewer extends StatelessWidget {
       listenable: MediaService(),
       builder: (context, _) {
         final service = MediaService();
-        if (service.category == MediaCategory.none) return const SizedBox.shrink();
+        
+        if (service.currentType == FileItemType.other || 
+            service.currentType == FileItemType.folder ||
+            service.currentFile == null) {
+          return const SizedBox.shrink();
+        }
 
         return Scaffold(
           backgroundColor: Colors.black,
           body: Stack(
             children: [
-              _buildContent(service, context),
-              _buildTopBar(service, context),
-              if (service.category != MediaCategory.image)
+              _buildMainContent(service),
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 10,
+                left: 10,
+                right: 10,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 28),
+                      onPressed: () => service.close(),
+                    ),
+                    Expanded(
+                      child: Text(
+                        service.currentName,
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (service.currentType == FileItemType.video || service.currentType == FileItemType.audio)
                 _buildCenterControls(service),
             ],
           ),
@@ -28,120 +53,71 @@ class GlobalMediaViewer extends StatelessWidget {
     );
   }
 
-  Widget _buildContent(MediaService service, BuildContext context) {
-    if (service.category == MediaCategory.image) {
+  Widget _buildMainContent(MediaService service) {
+    if (service.currentType == FileItemType.image) {
       return PageView.builder(
         itemCount: service.playlist.length,
         controller: PageController(initialPage: service.currentIndex),
-        onPageChanged: (index) {
-          if (index != service.currentIndex) {
-            final file = service.playlist[index];
-            service.open(file, service.playlist);
-          }
-        },
+        onPageChanged: (index) => service.updateIndex(index),
         itemBuilder: (context, index) {
           return InteractiveViewer(
-            child: Center(
-              child: Image.file(
-                File(service.playlist[index].path),
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  return const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.broken_image, color: Colors.white54, size: 64),
-                        SizedBox(height: 16),
-                        Text('无法加载图片', style: TextStyle(color: Colors.white54)),
-                      ],
-                    ),
-                  );
-                },
-              ),
+            child: Image.file(
+              File(service.playlist[index].path),
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.broken_image, color: Colors.white54, size: 64),
+                      SizedBox(height: 16),
+                      Text('无法加载图片', style: TextStyle(color: Colors.white54)),
+                    ],
+                  ),
+                );
+              },
             ),
           );
         },
       );
     }
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            service.category == MediaCategory.video ? Icons.movie : Icons.music_note,
-            color: Colors.white30,
-            size: 120,
-          ),
-          const SizedBox(height: 20),
-          Text(
-            service.currentName,
-            style: const TextStyle(color: Colors.white70, fontSize: 18),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopBar(MediaService service, BuildContext context) {
-    return Positioned(
-      top: MediaQuery.of(context).padding.top + 10,
-      left: 20,
-      right: 20,
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-            onPressed: () => service.close(),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              service.currentName,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (service.playlist.length > 1)
-            Text(
-              '${service.currentIndex + 1} / ${service.playlist.length}',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-        ],
+      child: Icon(
+        service.currentType == FileItemType.video ? Icons.movie : Icons.music_note,
+        color: Colors.white10,
+        size: 200,
       ),
     );
   }
 
   Widget _buildCenterControls(MediaService service) {
     return Center(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          IconButton(
-            icon: Icon(
-              Icons.skip_previous,
-              color: service.hasPrevious ? Colors.white : Colors.white38,
-              size: 50,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(color: Colors.black38, shape: BoxShape.circle),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.skip_previous, color: Colors.white, size: 45),
+              onPressed: service.playPrevious,
             ),
-            onPressed: service.hasPrevious ? () => service.previous() : null,
-          ),
-          IconButton(
-            icon: Icon(
-              service.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-              color: Colors.white,
-              size: 80,
+            const SizedBox(width: 30),
+            IconButton(
+              icon: Icon(
+                service.isPlaying ? Icons.pause_circle : Icons.play_circle,
+                color: Colors.white,
+                size: 85,
+              ),
+              onPressed: () => service.togglePlay(),
             ),
-            onPressed: () => service.togglePlay(),
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.skip_next,
-              color: service.hasNext ? Colors.white : Colors.white38,
-              size: 50,
+            const SizedBox(width: 30),
+            IconButton(
+              icon: const Icon(Icons.skip_next, color: Colors.white, size: 45),
+              onPressed: service.playNext,
             ),
-            onPressed: service.hasNext ? () => service.next() : null,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
