@@ -19,14 +19,14 @@ allprojects {
     }
 }
 
-// 强制所有插件子项目使用 compileSdk 35
+// 强制所有插件子项目使用 compileSdk 34
 // 解决 media_kit_libs_android_video 内部 hardcode 旧版本的问题
 subprojects {
     afterEvaluate { project ->
         if (project.plugins.hasPlugin("com.android.application") ||
             project.plugins.hasPlugin("com.android.library")) {
             project.android {
-                compileSdkVersion 35
+                compileSdkVersion 34
             }
         }
     }

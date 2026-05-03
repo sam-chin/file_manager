@@ -1,7 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 强制合并，无视插件内部的编译版本要求 -->
     <uses-sdk tools:overrideLibrary="com.alexmercerind.media_kit_libs_android_video, com.alexmercerind.media_kit_video" />
 
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -13,7 +12,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <application
-        android:label="媒体管理器"
+        android:label="Media Manager"
         android:name="${applicationName}"
         android:icon="@android:drawable/sym_def_app_icon"
         android:usesCleartextTraffic="true">
